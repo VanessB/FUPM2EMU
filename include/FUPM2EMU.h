@@ -4,6 +4,10 @@
 #include<vector>     // vector
 #include<functional> // function
 
+
+// НЕБОЛЬШОЙ КОММЕНТАРИЙ КАСАТЕЛЬНО РАБОТЫ С ПАМЯТЬЮ.
+// Память реализована как массив uint8_t. Слово-команда передаётся в uint32_t. Это крайне удобно для передачи аргументов операции, однако требует конвертации из четырёх uint_8t в uint32_t.
+
 namespace FUPM2EMU
 {
     // Коды операций.
@@ -76,19 +80,24 @@ namespace FUPM2EMU
 
     // Константы.
     const unsigned char WordBits = 32;          // Число бит в машинном слове.
-    const unsigned char AdressBits = 20;        // Число бит в адресах.
-    const size_t MemorySize = 1 << AdressBits;  // Размер адресуемой памяти.
+    const unsigned char WordBytes = 4;          // Число байт в машинном слове.
+    const unsigned char AddressBits = 20;       // Число бит в адресах.
+    const size_t MemorySize = 1 << AddressBits; // Размер адресуемой памяти.
     const unsigned char RegistersNumber = 16;   // Количество регистров.
     const unsigned int InstructionsNumber = 72; // Количество инструкций.
+
+    // Вспомогательные функции.
+    inline uint32_t ReadWord(uint8_t *Address);              // Конвертация четырёх uint8_t в uint32_t по указаному адресу.
+    inline void WriteWord(uint32_t Value, uint8_t *Address); // Конвертация uint32_t в четыре uint8_t и запись их в нужном порядке по указанному адресу.
 
 
     //////////////// STATE ////////////////
     // Состояние машины - значение регистров, флагов, указатель на блок памяти.
     struct State
     {
-        uint32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
-        uint8_t Flags;                       // Регистр флагов (битность не задана спецификацией).
-        std::shared_ptr<uint32_t> Memory;    // Указатель на используемую область памяти.
+        int32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
+        uint8_t Flags;                      // Регистр флагов (битность не задана спецификацией).
+        std::shared_ptr<uint8_t> Memory;    // Указатель на используемую область памяти.
 
         State();
         ~State();
