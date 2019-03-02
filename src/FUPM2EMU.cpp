@@ -3,7 +3,7 @@
 #include<cstdio>
 #include<cstring>
 
-//#define DEBUG_COUT
+//#define DEBUG_OUTPUT
 
 namespace FUPM2EMU
 {
@@ -36,16 +36,15 @@ namespace FUPM2EMU
 
         // Создание и заполнение нулями блока памяти.
         Memory = std::vector<uint8_t>(MemorySize * BytesInWord, 0);
-        //std::memset(Memory.get(), 0, MemorySize * sizeof(uint8_t) * BytesInWord);
 
         // Тестовая программа:
-        WriteWord(0x01000064, &(Memory[0 * BytesInWord])); // SYSCALL R0 100.
-        WriteWord(0x01100064, &(Memory[1 * BytesInWord])); // SYSCALL R1 100.
-        WriteWord(0x02010008, &(Memory[2 * BytesInWord])); // ADD R0 R1 0x8.
-        WriteWord(0x01000066, &(Memory[3 * BytesInWord])); // SYSCALL R0 102.
-        WriteWord(0x04000000, &(Memory[4 * BytesInWord])); // SUB R0 R0 0x0.
-        WriteWord(0x0300000A, &(Memory[5 * BytesInWord])); // ADDI R0 0xA.
-        WriteWord(0x01000069, &(Memory[6 * BytesInWord])); // SYSCALL R0 105.
+        setWord(0x01000064, 0); // SYSCALL R0 100.
+        setWord(0x01100064, 1); // SYSCALL R1 100.
+        setWord(0x0201FFF8, 2); // ADD R0 R1 -0x8.
+        setWord(0x01000066, 3); // SYSCALL R0 102.
+        setWord(0x04000000, 4); // SUB R0 R0 0x0.
+        setWord(0x0300000A, 5); // ADDI R0 0xA.
+        setWord(0x01000069, 6); // SYSCALL R0 105.
     }
     State::~State()
     {
@@ -67,13 +66,15 @@ namespace FUPM2EMU
     // PUBLIC:
     Emulator::Emulator()
     {
+        // !!! TODO !!!: разобраться с отрицательными Imm.
+
         // Инициализация массива инструкций (используется возможность преобразования лямбда-выражений к указателю на оператор ()).
         // Каждая инструкция возвращает код возврата. Он влияет на дальнейшую работу эмулятора (например, OP_TERMINATE завершает выполнение).
         InstructionsSet = std::vector<std::function<int (uint32_t, State&)>>
             ({
                 [](uint32_t Command, State& CurrentState) // HALT - выключение процессора.
                 {
-                    #ifdef DEBUG_COUT
+                    #ifdef DEBUG_OUTPUT
                     std::cout << "HALT" << std::endl;
                     #endif
 
@@ -86,7 +87,7 @@ namespace FUPM2EMU
                     uint8_t R = uint8_t((Command >> 20) & 0xF);
                     uint32_t Code = Command & 0xFFFFF;
 
-                    #ifdef DEBUG_COUT
+                    #ifdef DEBUG_OUTPUT
                     std::cout << "SYSCALL R" << (unsigned int)R << " " << Code << std::endl;
                     #endif
 
@@ -130,8 +131,9 @@ namespace FUPM2EMU
                     uint8_t R1 =   uint8_t((Command >> 20) & 0xF);
                     uint8_t R2 =   uint8_t((Command >> 16) & 0xF);
                     int32_t Imm = Command & 0xFFFF;
+                    if (Imm & (1 << 15)) { Imm |= 0xFFFF0000; } // Обработка случая с отрицательным Imm.
 
-                    #ifdef DEBUG_COUT
+                    #ifdef DEBUG_OUTPUT
                     std::cout << "ADD R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
                     #endif
 
@@ -142,8 +144,9 @@ namespace FUPM2EMU
                 {
                     uint8_t R = uint8_t((Command >> 20) & 0xF);
                     int32_t Imm = Command & 0xFFFFF;
+                    if (Imm & (1 << 19)) { Imm |= 0xFFF00000; } // Обработка случая с отрицательным Imm.
 
-                    #ifdef DEBUG_COUT
+                    #ifdef DEBUG_OUTPUT
                     std::cout << "ADDI R" << (unsigned int)R << " " << Imm << std::endl;
                     #endif
 
@@ -155,14 +158,28 @@ namespace FUPM2EMU
                     uint8_t R1 =   uint8_t((Command >> 20) & 0xF);
                     uint8_t R2 =   uint8_t((Command >> 16) & 0xF);
                     int32_t Imm = Command & 0xFFFF;
+                    if (Imm & (1 << 15)) { Imm |= 0xFFFF0000; } // Обработка случая с отрицательным Imm.
 
-                    #ifdef DEBUG_COUT
+                    #ifdef DEBUG_OUTPUT
                     std::cout << "SUB R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
                     #endif
 
                     CurrentState.Registers[R1] -= CurrentState.Registers[R2] + Imm;
                     return(OP_OK);
-                }
+                },
+                [](uint32_t Command, State& CurrentState) // SUBI - вычитание из регистра непосредственного операнда.
+                {
+                    uint8_t R = uint8_t((Command >> 20) & 0xF);
+                    int32_t Imm = Command & 0xFFFFF;
+                    if (Imm & (1 << 19)) { Imm |= 0xFFF00000; } // Обработка случая с отрицательным Imm.
+
+                    #ifdef DEBUG_OUTPUT
+                    std::cout << "SUBI R" << (unsigned int)R << " " << Imm << std::endl;
+                    #endif
+
+                    CurrentState.Registers[R] -= Imm;
+                    return(OP_OK);
+                },
             });
     }
     Emulator::~Emulator()
@@ -182,7 +199,7 @@ namespace FUPM2EMU
             Command = CurrentState.getWord(CurrentState.Registers[15]); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
             Operation = uint8_t((Command >> 24) & 0xFF);
 
-            #ifdef DEBUG_COUT
+            #ifdef DEBUG_OUTPUT
             std::cout << "R15: " << CurrentState.Registers[15] << std::endl;
             std::cout << "Command: 0x" << std::hex << Command << std::dec <<  std::endl;
             #endif
