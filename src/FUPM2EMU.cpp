@@ -8,10 +8,13 @@
 namespace FUPM2EMU
 {
     // Вспомогательные функции.
+    // Конвертация четырёх uint8_t в uint32_t по указаному адресу.
     inline uint32_t ReadWord(uint8_t *Address)
     {
         return(uint32_t(Address[0]) | (uint32_t(Address[1]) << 8) | (uint32_t(Address[2]) << 16) | (uint32_t(Address[3]) << 24));
     }
+
+    // Конвертация uint32_t в четыре uint8_t и запись их в нужном порядке по указанному адресу.
     inline void WriteWord(uint32_t Value, uint8_t *Address)
     {
         Address[0] = uint8_t(Value & 0xFF); Value >>= 8;
@@ -19,6 +22,8 @@ namespace FUPM2EMU
         Address[2] = uint8_t(Value & 0xFF); Value >>= 8;
         Address[3] = uint8_t(Value & 0xFF);
     }
+
+
 
     //////////////// STATE ////////////////
     State::State()
@@ -30,21 +35,30 @@ namespace FUPM2EMU
         Flags = 0;
 
         // Создание и заполнение нулями блока памяти.
-        Memory = std::shared_ptr<uint8_t>(new uint8_t[MemorySize * WordBytes]);
-        std::memset(Memory.get(), 0, MemorySize * sizeof(uint8_t) * WordBytes);
+        Memory = std::vector<uint8_t>(MemorySize * BytesInWord, 0);
+        //std::memset(Memory.get(), 0, MemorySize * sizeof(uint8_t) * BytesInWord);
 
         // Тестовая программа:
-        WriteWord(0x01000064, &(Memory.get()[0 * WordBytes])); // SYSCALL R0 100.
-        WriteWord(0x01100064, &(Memory.get()[1 * WordBytes])); // SYSCALL R1 100.
-        WriteWord(0x02010008, &(Memory.get()[2 * WordBytes])); // ADD R0 R1 0x8.
-        WriteWord(0x01000066, &(Memory.get()[3 * WordBytes])); // SYSCALL R0 102.
-        WriteWord(0x04000000, &(Memory.get()[4 * WordBytes])); // SUB R0 R0 0x0.
-        WriteWord(0x0300000A, &(Memory.get()[5 * WordBytes])); // ADDI R0 0xA.
-        WriteWord(0x01000069, &(Memory.get()[6 * WordBytes])); // SYSCALL R0 105.
+        WriteWord(0x01000064, &(Memory[0 * BytesInWord])); // SYSCALL R0 100.
+        WriteWord(0x01100064, &(Memory[1 * BytesInWord])); // SYSCALL R1 100.
+        WriteWord(0x02010008, &(Memory[2 * BytesInWord])); // ADD R0 R1 0x8.
+        WriteWord(0x01000066, &(Memory[3 * BytesInWord])); // SYSCALL R0 102.
+        WriteWord(0x04000000, &(Memory[4 * BytesInWord])); // SUB R0 R0 0x0.
+        WriteWord(0x0300000A, &(Memory[5 * BytesInWord])); // ADDI R0 0xA.
+        WriteWord(0x01000069, &(Memory[6 * BytesInWord])); // SYSCALL R0 105.
     }
     State::~State()
     {
         // ...
+    }
+
+    uint32_t State::getWord(size_t Address)
+    {
+        return(ReadWord(&(Memory[Address * BytesInWord])));
+    }
+    void State::setWord(uint32_t Value, size_t Address)
+    {
+        WriteWord(Value, &(Memory[Address * BytesInWord]));
     }
 
 
@@ -165,7 +179,7 @@ namespace FUPM2EMU
         // Пока все хорошо.
         while(ReturnCode == OP_OK)
         {
-            Command = ReadWord(&(CurrentState.Memory.get()[CurrentState.Registers[15] * WordBytes])); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
+            Command = CurrentState.getWord(CurrentState.Registers[15]); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
             Operation = uint8_t((Command >> 24) & 0xFF);
 
             #ifdef DEBUG_COUT

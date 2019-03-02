@@ -79,8 +79,8 @@ namespace FUPM2EMU
     ////////////////
 
     // Константы.
-    const unsigned char WordBits = 32;          // Число бит в машинном слове.
-    const unsigned char WordBytes = 4;          // Число байт в машинном слове.
+    const unsigned char BitsInWord = 32;        // Число бит в машинном слове.
+    const unsigned char BytesInWord = 4;        // Число байт в машинном слове.
     const unsigned char AddressBits = 20;       // Число бит в адресах.
     const size_t MemorySize = 1 << AddressBits; // Размер адресуемой памяти.
     const unsigned char RegistersNumber = 16;   // Количество регистров.
@@ -97,7 +97,11 @@ namespace FUPM2EMU
     {
         int32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
         uint8_t Flags;                      // Регистр флагов (битность не задана спецификацией).
-        std::shared_ptr<uint8_t> Memory;    // Указатель на используемую область памяти.
+        std::vector<uint8_t> Memory;        // Память эмулируемой машины.
+
+        // Удобные и сокращающие длину кода обёртки над ReadWord() и WriteWord(), работающие с Memory.
+        inline uint32_t getWord(size_t Address);
+        inline void setWord(uint32_t Value, size_t Address);
 
         State();
         ~State();
