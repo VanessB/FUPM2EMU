@@ -82,9 +82,9 @@ namespace FUPM2EMU
     const unsigned char BitsInWord = 32;        // Число бит в машинном слове.
     const unsigned char BytesInWord = 4;        // Число байт в машинном слове.
     const unsigned char AddressBits = 20;       // Число бит в адресах.
-    const size_t MemorySize = 1 << AddressBits; // Размер адресуемой памяти.
     const unsigned char RegistersNumber = 16;   // Количество регистров.
     const unsigned int InstructionsNumber = 72; // Количество инструкций.
+    const size_t MemorySize = 1 << AddressBits; // Размер адресуемой памяти.
 
     // Вспомогательные функции.
     inline uint32_t ReadWord(uint8_t *Address);              // Конвертация четырёх uint8_t в uint32_t по указаному адресу.

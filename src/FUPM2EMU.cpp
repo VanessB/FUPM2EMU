@@ -24,6 +24,23 @@ namespace FUPM2EMU
     }
 
 
+    // Внутренние вспомогательные функции.
+    // Получение аргументов команды типа RI.
+    inline void ExtractRIargs (uint32_t Command, uint8_t &R, int32_t &Imm)
+    {
+        R = uint8_t((Command >> 20) & 0xF);
+        Imm = Command & 0xFFFFF;
+        if (Imm & (1 << 19)) { Imm |= 0xFFF00000; } // Обработка случая с отрицательным Imm.
+    }
+    inline void ExtractRRargs (uint32_t Command, uint8_t &R1, uint8_t &R2, int32_t &Imm)
+    {
+        R1 = uint8_t((Command >> 20) & 0xF);
+        R2 = uint8_t((Command >> 16) & 0xF);
+        Imm = Command & 0xFFFF;
+        if (Imm & (1 << 15)) { Imm |= 0xFFFF0000; } // Обработка случая с отрицательным Imm.
+    }
+
+
 
     //////////////// STATE ////////////////
     State::State()
@@ -84,8 +101,9 @@ namespace FUPM2EMU
                 {
                     int ReturnCode = OP_OK;
 
-                    uint8_t R = uint8_t((Command >> 20) & 0xF);
-                    uint32_t Code = Command & 0xFFFFF;
+                    uint8_t R = 0;
+                    int32_t Code = 0;
+                    ExtractRIargs(Command, R, Code);
 
                     #ifdef DEBUG_OUTPUT
                     std::cout << "SYSCALL R" << (unsigned int)R << " " << Code << std::endl;
@@ -128,10 +146,10 @@ namespace FUPM2EMU
                 },
                 [](uint32_t Command, State& CurrentState) // ADD - сложение регистров.
                 {
-                    uint8_t R1 =   uint8_t((Command >> 20) & 0xF);
-                    uint8_t R2 =   uint8_t((Command >> 16) & 0xF);
-                    int32_t Imm = Command & 0xFFFF;
-                    if (Imm & (1 << 15)) { Imm |= 0xFFFF0000; } // Обработка случая с отрицательным Imm.
+                    uint8_t R1 = 0;
+                    uint8_t R2 = 0;
+                    int32_t Imm = 0;
+                    ExtractRRargs(Command, R1, R2, Imm);
 
                     #ifdef DEBUG_OUTPUT
                     std::cout << "ADD R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
@@ -142,9 +160,9 @@ namespace FUPM2EMU
                 },
                 [](uint32_t Command, State& CurrentState) // ADDI - прибавление к регистру непосредственного операнда.
                 {
-                    uint8_t R = uint8_t((Command >> 20) & 0xF);
-                    int32_t Imm = Command & 0xFFFFF;
-                    if (Imm & (1 << 19)) { Imm |= 0xFFF00000; } // Обработка случая с отрицательным Imm.
+                    uint8_t R = 0;
+                    int32_t Imm = 0;
+                    ExtractRIargs(Command, R, Imm);
 
                     #ifdef DEBUG_OUTPUT
                     std::cout << "ADDI R" << (unsigned int)R << " " << Imm << std::endl;
@@ -155,10 +173,10 @@ namespace FUPM2EMU
                 },
                 [](uint32_t Command, State& CurrentState) // SUB - разность регистров.
                 {
-                    uint8_t R1 =   uint8_t((Command >> 20) & 0xF);
-                    uint8_t R2 =   uint8_t((Command >> 16) & 0xF);
-                    int32_t Imm = Command & 0xFFFF;
-                    if (Imm & (1 << 15)) { Imm |= 0xFFFF0000; } // Обработка случая с отрицательным Imm.
+                    uint8_t R1 = 0;
+                    uint8_t R2 = 0;
+                    int32_t Imm = 0;
+                    ExtractRRargs(Command, R1, R2, Imm);
 
                     #ifdef DEBUG_OUTPUT
                     std::cout << "SUB R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
@@ -169,9 +187,9 @@ namespace FUPM2EMU
                 },
                 [](uint32_t Command, State& CurrentState) // SUBI - вычитание из регистра непосредственного операнда.
                 {
-                    uint8_t R = uint8_t((Command >> 20) & 0xF);
-                    int32_t Imm = Command & 0xFFFFF;
-                    if (Imm & (1 << 19)) { Imm |= 0xFFF00000; } // Обработка случая с отрицательным Imm.
+                    uint8_t R = 0;
+                    int32_t Imm = 0;
+                    ExtractRIargs(Command, R, Imm);
 
                     #ifdef DEBUG_OUTPUT
                     std::cout << "SUBI R" << (unsigned int)R << " " << Imm << std::endl;
