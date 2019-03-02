@@ -3,7 +3,7 @@
 #include<cstdio>
 #include<cstring>
 
-//#define DEBUG_OUTPUT
+// #define DEBUG_OUTPUT
 
 namespace FUPM2EMU
 {
@@ -11,16 +11,16 @@ namespace FUPM2EMU
     // Конвертация четырёх uint8_t в uint32_t по указаному адресу.
     inline uint32_t ReadWord(uint8_t *Address)
     {
-        return(uint32_t(Address[0]) | (uint32_t(Address[1]) << 8) | (uint32_t(Address[2]) << 16) | (uint32_t(Address[3]) << 24));
+        return((uint32_t(Address[0]) << 24) | (uint32_t(Address[1]) << 16) | (uint32_t(Address[2]) << 8) | uint32_t(Address[3]));
     }
 
     // Конвертация uint32_t в четыре uint8_t и запись их в нужном порядке по указанному адресу.
     inline void WriteWord(uint32_t Value, uint8_t *Address)
     {
-        Address[0] = uint8_t(Value & 0xFF); Value >>= 8;
-        Address[1] = uint8_t(Value & 0xFF); Value >>= 8;
+        Address[3] = uint8_t(Value & 0xFF); Value >>= 8;
         Address[2] = uint8_t(Value & 0xFF); Value >>= 8;
-        Address[3] = uint8_t(Value & 0xFF);
+        Address[1] = uint8_t(Value & 0xFF); Value >>= 8;
+        Address[0] = uint8_t(Value & 0xFF);
     }
 
 
@@ -53,45 +53,6 @@ namespace FUPM2EMU
 
         // Создание и заполнение нулями блока памяти.
         Memory = std::vector<uint8_t>(MemorySize * BytesInWord, 0);
-
-        // Тестовые программы:
-
-        // Сумма двух введённых чисел и восьми.
-        /*
-        setWord(0x01000064, 0); // SYSCALL R0 100.
-        setWord(0x01100064, 1); // SYSCALL R1 100.
-        setWord(0x0201FFF8, 2); // ADD R0 R1 -0x8.
-        setWord(0x01000066, 3); // SYSCALL R0 102.
-        setWord(0x04000000, 4); // SUB R0 R0 0x0.
-        setWord(0x0300000A, 5); // ADDI R0 0xA.
-        setWord(0x01000069, 6); // SYSCALL R0 105.
-        */
-
-        // (a * (b+1)) * 3
-        /*
-        setWord(0x01000064, 0); // SYSCALL R0 100.
-        setWord(0x01100064, 1); // SYSCALL R1 100.
-        setWord(0x06010001, 2); // MUL R0 R1 0x1.
-        setWord(0x07000003, 3); // MULI R0 0x3.
-        setWord(0x01000066, 4); // SYSCALL R0 102.
-        setWord(0x04000000, 5); // SUB R0 R0 0x0.
-        setWord(0x0300000A, 6); // ADDI R0 0xA.
-        setWord(0x01000069, 7); // SYSCALL R0 105.
-        */
-
-        // (ab / c) / 3
-        setWord(0x01000064, 0);  // SYSCALL R0 100.
-        setWord(0x01100064, 1);  // SYSCALL R1 100.
-        setWord(0x01200064, 2);  // SYSCALL R2 100.
-        setWord(0x08020001, 3);  // DIV R0 R2 0x0.
-        setWord(0x04110000, 4);  // SUB R1 R1 0x0.
-        setWord(0x09000003, 5);  // DIVI R0 0x3.
-        setWord(0x01000066, 6);  // SYSCALL R0 102.
-        setWord(0x04000000, 7);  // SUB R0 R0 0x0.
-        setWord(0x0300000A, 8);  // ADDI R0 0xA.
-        setWord(0x01000069, 9);  // SYSCALL R0 105.
-        setWord(0x01100066, 10); // SYSCALL R1 102.
-        setWord(0x01000069, 11); // SYSCALL R0 105.
     }
     State::~State()
     {
@@ -117,7 +78,8 @@ namespace FUPM2EMU
         // Каждая инструкция возвращает код возврата. Он влияет на дальнейшую работу эмулятора (например, OP_TERMINATE завершает выполнение).
         InstructionsSet = std::vector<std::function<OpReturnCode (uint32_t, State&)>>
         ({
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // HALT - выключение процессора.
+            // HALT - выключение процессора.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 #ifdef DEBUG_OUTPUT
                 std::cout << "HALT" << std::endl;
@@ -125,7 +87,9 @@ namespace FUPM2EMU
 
                 return(OP_TERMINATE);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // SYSCALL - системный вызов.
+
+            // SYSCALL - системный вызов.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 OpReturnCode ReturnCode = OP_OK;
 
@@ -172,7 +136,9 @@ namespace FUPM2EMU
                 }
                 return(ReturnCode);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // ADD - сложение регистров.
+
+            // ADD - сложение регистров.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R1 = 0;
                 uint8_t R2 = 0;
@@ -186,7 +152,9 @@ namespace FUPM2EMU
                 CurrentState.Registers[R1] += CurrentState.Registers[R2] + Imm;
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // ADDI - прибавление к регистру непосредственного операнда.
+
+            // ADDI - прибавление к регистру непосредственного операнда.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R = 0;
                 int32_t Imm = 0;
@@ -199,7 +167,9 @@ namespace FUPM2EMU
                 CurrentState.Registers[R] += Imm;
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // SUB - разность регистров.
+
+            // SUB - разность регистров.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R1 = 0;
                 uint8_t R2 = 0;
@@ -213,7 +183,9 @@ namespace FUPM2EMU
                 CurrentState.Registers[R1] -= CurrentState.Registers[R2] + Imm;
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // SUBI - вычитание из регистра непосредственного операнда.
+
+            // SUBI - вычитание из регистра непосредственного операнда.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R = 0;
                 int32_t Imm = 0;
@@ -226,7 +198,9 @@ namespace FUPM2EMU
                 CurrentState.Registers[R] -= Imm;
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // MUL - произведение регистров.
+
+            // MUL - произведение регистров.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R1 = 0;
                 uint8_t R2 = 0;
@@ -245,7 +219,9 @@ namespace FUPM2EMU
                 CurrentState.Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // MULI - произведение регистра на непосредственный операнд.
+
+            // MULI - произведение регистра на непосредственный операнд.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R = 0;
                 int32_t Imm = 0;
@@ -263,7 +239,9 @@ namespace FUPM2EMU
                 CurrentState.Registers[R + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // DIV - частное и остаток от деления пары регистров на регистр.
+
+            // DIV - частное и остаток от деления пары регистров на регистр.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R1 = 0;
                 uint8_t R2 = 0;
@@ -293,14 +271,16 @@ namespace FUPM2EMU
                 CurrentState.Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
                 return(OP_OK);
             },
-            [](uint32_t Command, State& CurrentState)->OpReturnCode // DIVI - частное и остаток от деления пары регистров на непосредственный операнд.
+
+            // DIVI - частное и остаток от деления пары регистров на непосредственный операнд.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
             {
                 uint8_t R = 0;
                 int32_t Imm = 0;
                 ExtractRIargs(Command, R, Imm);
 
                 #ifdef DEBUG_OUTPUT
-                std::cout << "DIVI R" << (unsigned int)R1 << " " << Imm << std::endl;
+                std::cout << "DIVI R" << (unsigned int)R << " " << Imm << std::endl;
                 #endif
 
                 // Результат деления приведёт к выходу за пределы существующих регистров.
@@ -322,7 +302,28 @@ namespace FUPM2EMU
                 CurrentState.Registers[R + 1] = int32_t(Remainder & 0xFFFFFFFF);
                 return(OP_OK);
             },
+
+            // Отсутствующие операции.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode { return(OP_ERROR); },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode { return(OP_ERROR); },
+
+            // LC - загрузка константы в регистр.
+            [](uint32_t Command, State& CurrentState)->OpReturnCode
+            {
+                uint8_t R = 0;
+                int32_t Imm = 0;
+                ExtractRIargs(Command, R, Imm);
+
+                #ifdef DEBUG_OUTPUT
+                std::cout << "LC R" << (unsigned int)R << " " << Imm << std::endl;
+                #endif
+
+                CurrentState.Registers[R] = Imm;
+                return(OP_OK);
+            }
         });
+
+        // Эта штука превращается в монстра... Надо что-то придумать, так как половина кода тут повторяется.
     }
     Emulator::~Emulator()
     {
@@ -368,9 +369,47 @@ namespace FUPM2EMU
                     }
                     default: { break; }
                 }
+                std::cerr << "FUPM2EMU has encountered a critical error. Shutting down." << std::endl;
                 break;
             }
         }
+        return(0);
+    }
+
+    int Emulator::LoadState(std::fstream &FileStream)
+    {
+        // Первые 16 * 4 + 1 байт - регистры + регистр флагов, остальное до конца файла - память.
+        char Bytes[BytesInWord];
+
+        // Регистры.
+        for(size_t i = 0; i < RegistersNumber; ++i)
+        {
+            if(FileStream.read(Bytes, BytesInWord))
+            {
+                CurrentState.Registers[i] = ReadWord((uint8_t*)Bytes);
+                #ifdef DEBUG_OUTPUT
+                std::cout << "R" << i << ": " << CurrentState.Registers[i] << std::endl;
+                #endif
+            }
+        }
+
+        // Регистр флагов.
+        if (FileStream.get(Bytes[0])) { CurrentState.Flags = uint8_t(Bytes[0]); }
+        #ifdef DEBUG_OUTPUT
+        std::cout << "Flags: " << (unsigned int)CurrentState.Flags << std::endl;
+        #endif
+
+        // Память.
+        size_t Address = 0;
+        while(FileStream.get(Bytes[0]) && (Address < (MemorySize * BytesInWord)) )
+        {
+            CurrentState.Memory[Address] = uint8_t(Bytes[0]);
+            #ifdef DEBUG_OUTPUT
+            std::cout << Address << ": " << (unsigned int)CurrentState.Memory[Address] << std::endl;
+            #endif
+            ++Address;
+        }
+
         return(0);
     }
 

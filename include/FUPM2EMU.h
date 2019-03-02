@@ -3,6 +3,7 @@
 #include<memory>     // Умные указатели.
 #include<vector>     // vector
 #include<functional> // function
+#include<fstream>    // file stream
 
 
 // НЕБОЛЬШОЙ КОММЕНТАРИЙ КАСАТЕЛЬНО РАБОТЫ С ПАМЯТЬЮ.
@@ -127,10 +128,12 @@ namespace FUPM2EMU
         int Translate(); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
         int Run();       // Выполнить текущее состояние.
 
+        int LoadState(std::fstream &FileStream); // Загрузка состояния из потока файла.
+
     protected:
         State CurrentState; // Текущее состояние машины.
         std::vector<std::function<OpReturnCode (uint32_t, State&)>> InstructionsSet; // Набор инструкций - массив ссылок (не совсем правда) на функции (индекс - код операции).
-
+        
     private:
 
     };

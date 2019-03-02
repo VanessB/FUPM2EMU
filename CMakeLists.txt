@@ -18,4 +18,4 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wpedantic -Wextra -fe
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -Wextra -O3 --std=c++17")
 
 # Math
-# target_link_libraries(T.exe m)
+# target_link_libraries(FUPM2EMU.exe m)
