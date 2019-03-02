@@ -54,7 +54,10 @@ namespace FUPM2EMU
         // Создание и заполнение нулями блока памяти.
         Memory = std::vector<uint8_t>(MemorySize * BytesInWord, 0);
 
-        // Тестовая программа:
+        // Тестовые программы:
+
+        // Сумма двух введённых чисел и восьми.
+        /*
         setWord(0x01000064, 0); // SYSCALL R0 100.
         setWord(0x01100064, 1); // SYSCALL R1 100.
         setWord(0x0201FFF8, 2); // ADD R0 R1 -0x8.
@@ -62,6 +65,33 @@ namespace FUPM2EMU
         setWord(0x04000000, 4); // SUB R0 R0 0x0.
         setWord(0x0300000A, 5); // ADDI R0 0xA.
         setWord(0x01000069, 6); // SYSCALL R0 105.
+        */
+
+        // (a * (b+1)) * 3
+        /*
+        setWord(0x01000064, 0); // SYSCALL R0 100.
+        setWord(0x01100064, 1); // SYSCALL R1 100.
+        setWord(0x06010001, 2); // MUL R0 R1 0x1.
+        setWord(0x07000003, 3); // MULI R0 0x3.
+        setWord(0x01000066, 4); // SYSCALL R0 102.
+        setWord(0x04000000, 5); // SUB R0 R0 0x0.
+        setWord(0x0300000A, 6); // ADDI R0 0xA.
+        setWord(0x01000069, 7); // SYSCALL R0 105.
+        */
+
+        // (ab / c) / 3
+        setWord(0x01000064, 0);  // SYSCALL R0 100.
+        setWord(0x01100064, 1);  // SYSCALL R1 100.
+        setWord(0x01200064, 2);  // SYSCALL R2 100.
+        setWord(0x08020001, 3);  // DIV R0 R2 0x0.
+        setWord(0x04110000, 4);  // SUB R1 R1 0x0.
+        setWord(0x09000003, 5);  // DIVI R0 0x3.
+        setWord(0x01000066, 6);  // SYSCALL R0 102.
+        setWord(0x04000000, 7);  // SUB R0 R0 0x0.
+        setWord(0x0300000A, 8);  // ADDI R0 0xA.
+        setWord(0x01000069, 9);  // SYSCALL R0 105.
+        setWord(0x01100066, 10); // SYSCALL R1 102.
+        setWord(0x01000069, 11); // SYSCALL R0 105.
     }
     State::~State()
     {
@@ -83,122 +113,216 @@ namespace FUPM2EMU
     // PUBLIC:
     Emulator::Emulator()
     {
-        // !!! TODO !!!: разобраться с отрицательными Imm.
-
         // Инициализация массива инструкций (используется возможность преобразования лямбда-выражений к указателю на оператор ()).
         // Каждая инструкция возвращает код возврата. Он влияет на дальнейшую работу эмулятора (например, OP_TERMINATE завершает выполнение).
-        InstructionsSet = std::vector<std::function<int (uint32_t, State&)>>
-            ({
-                [](uint32_t Command, State& CurrentState) // HALT - выключение процессора.
+        InstructionsSet = std::vector<std::function<OpReturnCode (uint32_t, State&)>>
+        ({
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // HALT - выключение процессора.
+            {
+                #ifdef DEBUG_OUTPUT
+                std::cout << "HALT" << std::endl;
+                #endif
+
+                return(OP_TERMINATE);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // SYSCALL - системный вызов.
+            {
+                OpReturnCode ReturnCode = OP_OK;
+
+                uint8_t R = 0;
+                int32_t Code = 0;
+                ExtractRIargs(Command, R, Code);
+
+                #ifdef DEBUG_OUTPUT
+                std::cout << "SYSCALL R" << (unsigned int)R << " " << Code << std::endl;
+                #endif
+
+                switch (Code)
                 {
-                    #ifdef DEBUG_OUTPUT
-                    std::cout << "HALT" << std::endl;
-                    #endif
-
-                    return(OP_TERMINATE);
-                },
-                [](uint32_t Command, State& CurrentState) // SYSCALL - системный вызов.
-                {
-                    int ReturnCode = OP_OK;
-
-                    uint8_t R = 0;
-                    int32_t Code = 0;
-                    ExtractRIargs(Command, R, Code);
-
-                    #ifdef DEBUG_OUTPUT
-                    std::cout << "SYSCALL R" << (unsigned int)R << " " << Code << std::endl;
-                    #endif
-
-                    switch (Code)
+                    // EXIT - выход.
+                    case 0:
                     {
-                        // EXIT - выход.
-                        case 0:
-                        {
-                            ReturnCode = OP_TERMINATE;
-                            break;
-                        }
-                        // SCANINT - запрос целого числа.
-                        case 100:
-                        {
-                            std::cin >> CurrentState.Registers[R];
-                            break;
-                        }
-                        // PRINTINT - вывод целого числа.
-                        case 102:
-                        {
-                            std::cout << CurrentState.Registers[R];
-                            break;
-                        }
-                        // PUTCHAR - вывод символа.
-                        case 105:
-                        {
-                            putchar(uint8_t(CurrentState.Registers[R]));
-                            break;
-                        }
-                        // Использован неспецифицированный код системного вызова.
-                        default:
-                        {
-                            ReturnCode = OP_ERROR;
-                            break;
-                        }
+                        ReturnCode = OP_TERMINATE;
+                        break;
                     }
-                    return(ReturnCode);
-                },
-                [](uint32_t Command, State& CurrentState) // ADD - сложение регистров.
-                {
-                    uint8_t R1 = 0;
-                    uint8_t R2 = 0;
-                    int32_t Imm = 0;
-                    ExtractRRargs(Command, R1, R2, Imm);
+                    // SCANINT - запрос целого числа.
+                    case 100:
+                    {
+                        std::cin >> CurrentState.Registers[R];
+                        break;
+                    }
+                    // PRINTINT - вывод целого числа.
+                    case 102:
+                    {
+                        std::cout << CurrentState.Registers[R];
+                        break;
+                    }
+                    // PUTCHAR - вывод символа.
+                    case 105:
+                    {
+                        putchar(uint8_t(CurrentState.Registers[R]));
+                        break;
+                    }
+                    // Использован неспецифицированный код системного вызова.
+                    default:
+                    {
+                        ReturnCode = OP_ERROR;
+                        break;
+                    }
+                }
+                return(ReturnCode);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // ADD - сложение регистров.
+            {
+                uint8_t R1 = 0;
+                uint8_t R2 = 0;
+                int32_t Imm = 0;
+                ExtractRRargs(Command, R1, R2, Imm);
 
-                    #ifdef DEBUG_OUTPUT
-                    std::cout << "ADD R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
-                    #endif
+                #ifdef DEBUG_OUTPUT
+                std::cout << "ADD R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
+                #endif
 
-                    CurrentState.Registers[R1] += CurrentState.Registers[R2] + Imm;
-                    return(OP_OK);
-                },
-                [](uint32_t Command, State& CurrentState) // ADDI - прибавление к регистру непосредственного операнда.
-                {
-                    uint8_t R = 0;
-                    int32_t Imm = 0;
-                    ExtractRIargs(Command, R, Imm);
+                CurrentState.Registers[R1] += CurrentState.Registers[R2] + Imm;
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // ADDI - прибавление к регистру непосредственного операнда.
+            {
+                uint8_t R = 0;
+                int32_t Imm = 0;
+                ExtractRIargs(Command, R, Imm);
 
-                    #ifdef DEBUG_OUTPUT
-                    std::cout << "ADDI R" << (unsigned int)R << " " << Imm << std::endl;
-                    #endif
+                #ifdef DEBUG_OUTPUT
+                std::cout << "ADDI R" << (unsigned int)R << " " << Imm << std::endl;
+                #endif
 
-                    CurrentState.Registers[R] += Imm;
-                    return(OP_OK);
-                },
-                [](uint32_t Command, State& CurrentState) // SUB - разность регистров.
-                {
-                    uint8_t R1 = 0;
-                    uint8_t R2 = 0;
-                    int32_t Imm = 0;
-                    ExtractRRargs(Command, R1, R2, Imm);
+                CurrentState.Registers[R] += Imm;
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // SUB - разность регистров.
+            {
+                uint8_t R1 = 0;
+                uint8_t R2 = 0;
+                int32_t Imm = 0;
+                ExtractRRargs(Command, R1, R2, Imm);
 
-                    #ifdef DEBUG_OUTPUT
-                    std::cout << "SUB R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
-                    #endif
+                #ifdef DEBUG_OUTPUT
+                std::cout << "SUB R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
+                #endif
 
-                    CurrentState.Registers[R1] -= CurrentState.Registers[R2] + Imm;
-                    return(OP_OK);
-                },
-                [](uint32_t Command, State& CurrentState) // SUBI - вычитание из регистра непосредственного операнда.
-                {
-                    uint8_t R = 0;
-                    int32_t Imm = 0;
-                    ExtractRIargs(Command, R, Imm);
+                CurrentState.Registers[R1] -= CurrentState.Registers[R2] + Imm;
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // SUBI - вычитание из регистра непосредственного операнда.
+            {
+                uint8_t R = 0;
+                int32_t Imm = 0;
+                ExtractRIargs(Command, R, Imm);
 
-                    #ifdef DEBUG_OUTPUT
-                    std::cout << "SUBI R" << (unsigned int)R << " " << Imm << std::endl;
-                    #endif
+                #ifdef DEBUG_OUTPUT
+                std::cout << "SUBI R" << (unsigned int)R << " " << Imm << std::endl;
+                #endif
 
-                    CurrentState.Registers[R] -= Imm;
-                    return(OP_OK);
-                },
-            });
+                CurrentState.Registers[R] -= Imm;
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // MUL - произведение регистров.
+            {
+                uint8_t R1 = 0;
+                uint8_t R2 = 0;
+                int32_t Imm = 0;
+                ExtractRRargs(Command, R1, R2, Imm);
+
+                #ifdef DEBUG_OUTPUT
+                std::cout << "MUL R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
+                #endif
+
+                // Результат умножения приведёт к выходу за пределы существующих регистров.
+                if (R1 + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+
+                int64_t Product = int64_t(CurrentState.Registers[R1]) * int64_t(CurrentState.Registers[R2] + Imm);
+                CurrentState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
+                CurrentState.Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // MULI - произведение регистра на непосредственный операнд.
+            {
+                uint8_t R = 0;
+                int32_t Imm = 0;
+                ExtractRIargs(Command, R, Imm);
+
+                #ifdef DEBUG_OUTPUT
+                std::cout << "MULI R" << (unsigned int)R << " " << Imm << std::endl;
+                #endif
+
+                // Результат умножения приведёт к выходу за пределы существующих регистров.
+                if (R + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+
+                int64_t Product = int64_t(CurrentState.Registers[R]) * int64_t(Imm);
+                CurrentState.Registers[R] = int32_t(Product & 0xFFFFFFFF);
+                CurrentState.Registers[R + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // DIV - частное и остаток от деления пары регистров на регистр.
+            {
+                uint8_t R1 = 0;
+                uint8_t R2 = 0;
+                int32_t Imm = 0;
+                ExtractRRargs(Command, R1, R2, Imm);
+
+                #ifdef DEBUG_OUTPUT
+                std::cout << "DIV R" << (unsigned int)R1 << " R" << (unsigned int)R2 << " " << Imm << std::endl;
+                #endif
+
+                // Результат деления приведёт к выходу за пределы существующих регистров.
+                if (R1 + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+                // Происходит деление на ноль.
+                if (!CurrentState.Registers[R2]) { throw(OPEX_DIVBYZERO); }
+
+                int64_t Divident = int64_t(CurrentState.Registers[R1] | (int64_t(CurrentState.Registers[R1 + 1]) << BitsInWord));
+                int64_t Divider = int64_t(CurrentState.Registers[R2]);
+                int64_t Product = Divident / Divider;
+
+                // Результат деления не помещается в регистр. По спецификации - деление на ноль.
+                //std::cout << Product << std::endl;
+                if (Product > 0x00000000FFFFFFFF) { throw(OPEX_DIVBYZERO); }
+
+                int64_t Remainder = Divident % Divider;
+
+                CurrentState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
+                CurrentState.Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
+                return(OP_OK);
+            },
+            [](uint32_t Command, State& CurrentState)->OpReturnCode // DIVI - частное и остаток от деления пары регистров на непосредственный операнд.
+            {
+                uint8_t R = 0;
+                int32_t Imm = 0;
+                ExtractRIargs(Command, R, Imm);
+
+                #ifdef DEBUG_OUTPUT
+                std::cout << "DIVI R" << (unsigned int)R1 << " " << Imm << std::endl;
+                #endif
+
+                // Результат деления приведёт к выходу за пределы существующих регистров.
+                if (R + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+                // Происходит деление на ноль.
+                if (!Imm) { throw(OPEX_DIVBYZERO); }
+
+                int64_t Divident = int64_t(CurrentState.Registers[R] | (int64_t(CurrentState.Registers[R + 1]) << BitsInWord));
+                int64_t Divider = int64_t(Imm);
+                int64_t Product = Divident / Divider;
+
+                // Результат деления не помещается в регистр. По спецификации - деление на ноль.
+                //std::cout << Product << std::endl;
+                if (Product > 0x00000000FFFFFFFF) { throw(OPEX_DIVBYZERO); }
+
+                int64_t Remainder = Divident % Divider;
+
+                CurrentState.Registers[R] = int32_t(Product & 0xFFFFFFFF);
+                CurrentState.Registers[R + 1] = int32_t(Remainder & 0xFFFFFFFF);
+                return(OP_OK);
+            },
+        });
     }
     Emulator::~Emulator()
     {
@@ -222,8 +346,30 @@ namespace FUPM2EMU
             std::cout << "Command: 0x" << std::hex << Command << std::dec <<  std::endl;
             #endif
 
-            ReturnCode = InstructionsSet[Operation](Command, CurrentState);
-            ++(CurrentState.Registers[15]);
+            try
+            {
+                ReturnCode = InstructionsSet[Operation](Command, CurrentState);
+                ++(CurrentState.Registers[15]);
+            }
+            catch (OpException Exception)
+            {
+                switch(Exception)
+                {
+                    case OPEX_OK: { break; }
+                    case OPEX_INVALIDREG:
+                    {
+                        std::cerr << "[ERROR]: access to an invalid register." << std::endl;
+                        break;
+                    }
+                    case OPEX_DIVBYZERO:
+                    {
+                        std::cerr << "[ERROR]: division by zero." << std::endl;
+                        break;
+                    }
+                    default: { break; }
+                }
+                break;
+            }
         }
         return(0);
     }
