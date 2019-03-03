@@ -12,7 +12,7 @@
 namespace FUPM2EMU
 {
     // Коды операций.
-    enum OperationCodes
+    enum OPERATION_CODE
     {
         HALT    = 0,
         SYSCALL = 1,
@@ -69,7 +69,7 @@ namespace FUPM2EMU
     };
 
     // Коды, возвращаемые инструкциями эмулятору.
-    enum OpReturnCode
+    enum OP_RETURNCODE
     {
         OP_OK        = 0, // Продолжение работы.
         OP_TERMINATE = 1, // Штатное завершение.
@@ -78,11 +78,19 @@ namespace FUPM2EMU
     };
 
     // Коды испключений при выполнении операции.
-    enum OpException
+    enum OP_EXCEPTION
     {
-        OPEX_OK = 0,
-        OPEX_INVALIDREG = 1,
-        OPEX_DIVBYZERO = 2,
+        OPEX_OK         = 0, // OK.
+        OPEX_INVALIDREG = 1, // Доступ к несуществующим регистрам.
+        OPEX_DIVBYZERO  = 2, // Деление на ноль.
+    };
+
+    // Коды исключений исполнителя.
+    enum EXECUTOR_EXCEPTION
+    {
+        EXEX_OK           = 0, // OK.
+        EXEX_MACHINE      = 1, // Исключение, сгенерированное эмулируемой машиной.
+        EXEX_INVALIDSTATE = 2, // Исключение, вызванное невалидным состоянием эмулируемой машины.
     };
 
     ////////////////
@@ -100,7 +108,7 @@ namespace FUPM2EMU
     inline void WriteWord(uint32_t Value, uint8_t *Address); // Конвертация uint32_t в четыре uint8_t и запись их в нужном порядке по указанному адресу.
 
 
-    //////////////// STATE ////////////////
+    /////////////////  STATE  ////////////////
     // Состояние машины - значение регистров, флагов, указатель на блок памяти.
     struct State
     {
@@ -114,6 +122,25 @@ namespace FUPM2EMU
 
         State();
         ~State();
+    };
+
+
+    //////////////// EXECUTOR ////////////////
+    // Исполнитель машинных команд.
+    class Executor
+    {
+    public:
+        Executor(State* initState);
+        ~Executor();
+
+        // Выполнение комманды.
+        inline OP_RETURNCODE operator [](uint32_t Command);
+
+    protected:
+        State* OperatedState; // Прикреплённое состояние эмулируемой машины (что-то мне эта иерархическая паутина уже не нравится).
+
+    private:
+
     };
 
 
@@ -132,8 +159,8 @@ namespace FUPM2EMU
 
     protected:
         State CurrentState; // Текущее состояние машины.
-        std::vector<std::function<OpReturnCode (uint32_t, State&)>> InstructionsSet; // Набор инструкций - массив ссылок (не совсем правда) на функции (индекс - код операции).
-        
+        Executor Execute;   // Исполнитель команд.
+
     private:
 
     };
