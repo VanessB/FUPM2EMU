@@ -85,8 +85,9 @@ namespace FUPM2EMU
 
     /////////////////  STATE  ////////////////
     // Состояние машины - значение регистров, флагов, указатель на блок памяти.
-    struct State
+    class State
     {
+    public:
         int32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
         uint8_t Flags;                      // Регистр флагов (битность не задана спецификацией).
         std::vector<uint8_t> Memory;        // Память эмулируемой машины.
@@ -94,9 +95,17 @@ namespace FUPM2EMU
         State();
         ~State();
 
+        // Загрузка состояния из потока файла.
+        int Load(std::fstream &FileStream);
+
         // Удобные и сокращающие длину кода обёртки над ReadWord() и WriteWord(), работающие с Memory.
         inline uint32_t getWord(size_t Address);
         inline void setWord(uint32_t Value, size_t Address);
+
+    protected:
+
+    private:
+
     };
 
 
@@ -143,10 +152,13 @@ namespace FUPM2EMU
 
 
     //////////////// EMULATOR ////////////////
-    // Эмулятор - создание и выполнение состояния.
+    // Эмулятор - интерфейс для работы с исполнителем машинных команд, состоянием машины и транслятором ассемблера.
     class Emulator
     {
     public:
+        State MainState;       // Текущее состояние машины.
+        Executor MainExecutor; // Исполнитель команд.
+
         Emulator();
         ~Emulator();
 
@@ -156,8 +168,6 @@ namespace FUPM2EMU
         int AssembleState(std::fstream &FileStream); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
 
     protected:
-        State CurrentState; // Текущее состояние машины.
-        Executor Execute;   // Исполнитель команд.
 
     private:
 

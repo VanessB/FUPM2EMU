@@ -44,6 +44,43 @@ namespace FUPM2EMU
         // ...
     }
 
+    int State::Load(std::fstream &FileStream)
+    {
+        // Первые 16 * 4 + 1 байт - регистры + регистр флагов, остальное до конца файла - память.
+        char Bytes[BytesInWord];
+
+        // Регистры.
+        for(size_t i = 0; i < RegistersNumber; ++i)
+        {
+            if(FileStream.read(Bytes, BytesInWord))
+            {
+                Registers[i] = ReadWord((uint8_t*)Bytes);
+                #ifdef LOADINGSTATE_DEBUG_OUTPUT
+                std::cout << "R" << i << ": " << Registers[i] << std::endl;
+                #endif
+            }
+        }
+
+        // Регистр флагов.
+        if (FileStream.get(Bytes[0])) { Flags = uint8_t(Bytes[0]); }
+        #ifdef LOADINGSTATE_DEBUG_OUTPUT
+        std::cout << "Flags: " << (unsigned int)Flags << std::endl;
+        #endif
+
+        // Память.
+        size_t Address = 0;
+        while(FileStream.get(Bytes[0]) && (Address < (MemorySize * BytesInWord)))
+        {
+            Memory[Address] = uint8_t(Bytes[0]);
+            #ifdef LOADINGSTATE_DEBUG_OUTPUT
+            std::cout << Address << ": " << (unsigned int)Memory[Address] << std::endl;
+            #endif
+            ++Address;
+        }
+
+        return(0);
+    }
+
     uint32_t State::getWord(size_t Address)
     {
         return(ReadWord(&(Memory[Address * BytesInWord])));
@@ -294,16 +331,16 @@ namespace FUPM2EMU
         // Пока все хорошо.
         while(ReturnCode == Executor::ReturnCode::OK)
         {
-            Command = CurrentState.getWord(CurrentState.Registers[15]); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
+            Command = MainState.getWord(MainState.Registers[15]); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
 
             #ifdef EXECUTION_DEBUG_OUTPUT
-            std::cout << "R15: " << CurrentState.Registers[15] << std::endl;
+            std::cout << "R15: " << State.Registers[15] << std::endl;
             std::cout << "Command: 0x" << std::hex << Command << std::dec <<  std::endl;
             #endif
 
             try
             {
-                ReturnCode = Execute(Command, CurrentState);
+                ReturnCode = MainExecutor(Command, MainState);
             }
             catch (Executor::Exception Exception)
             {
@@ -330,48 +367,6 @@ namespace FUPM2EMU
             std::cout << "ReturnCode: " << ReturnCode << std::endl;
             #endif
         }
-        return(0);
-    }
-
-    int Emulator::LoadState(std::fstream &FileStream)
-    {
-        // Первые 16 * 4 + 1 байт - регистры + регистр флагов, остальное до конца файла - память.
-        char Bytes[BytesInWord];
-
-        // Регистры.
-        for(size_t i = 0; i < RegistersNumber; ++i)
-        {
-            if(FileStream.read(Bytes, BytesInWord))
-            {
-                CurrentState.Registers[i] = ReadWord((uint8_t*)Bytes);
-                #ifdef LOADINGSTATE_DEBUG_OUTPUT
-                std::cout << "R" << i << ": " << CurrentState.Registers[i] << std::endl;
-                #endif
-            }
-        }
-
-        // Регистр флагов.
-        if (FileStream.get(Bytes[0])) { CurrentState.Flags = uint8_t(Bytes[0]); }
-        #ifdef LOADINGSTATE_DEBUG_OUTPUT
-        std::cout << "Flags: " << (unsigned int)CurrentState.Flags << std::endl;
-        #endif
-
-        // Память.
-        size_t Address = 0;
-        while(FileStream.get(Bytes[0]) && (Address < (MemorySize * BytesInWord)))
-        {
-            CurrentState.Memory[Address] = uint8_t(Bytes[0]);
-            #ifdef LOADINGSTATE_DEBUG_OUTPUT
-            std::cout << Address << ": " << (unsigned int)CurrentState.Memory[Address] << std::endl;
-            #endif
-            ++Address;
-        }
-
-        return(0);
-    }
-
-    int Emulator::AssembleState(std::fstream &FileStream)
-    {
         return(0);
     }
 
