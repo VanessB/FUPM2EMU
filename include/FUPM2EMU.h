@@ -68,31 +68,6 @@ namespace FUPM2EMU
         STORER2 = 71
     };
 
-    // Коды, возвращаемые инструкциями эмулятору.
-    enum OP_RETURNCODE
-    {
-        OP_OK        = 0, // Продолжение работы.
-        OP_TERMINATE = 1, // Штатное завершение.
-        OP_WARNING   = 2, // Не описанная в спецификации потенциально опасная работа.
-        OP_ERROR     = 3, // Критическая ошибка.
-    };
-
-    // Коды испключений при выполнении операции.
-    enum OP_EXCEPTION
-    {
-        OPEX_OK         = 0, // OK.
-        OPEX_INVALIDREG = 1, // Доступ к несуществующим регистрам.
-        OPEX_DIVBYZERO  = 2, // Деление на ноль.
-    };
-
-    // Коды исключений исполнителя.
-    enum EXECUTOR_EXCEPTION
-    {
-        EXEX_OK           = 0, // OK.
-        EXEX_MACHINE      = 1, // Исключение, сгенерированное эмулируемой машиной.
-        EXEX_INVALIDSTATE = 2, // Исключение, вызванное невалидным состоянием эмулируемой машины.
-    };
-
     ////////////////
 
     // Константы.
@@ -116,12 +91,12 @@ namespace FUPM2EMU
         uint8_t Flags;                      // Регистр флагов (битность не задана спецификацией).
         std::vector<uint8_t> Memory;        // Память эмулируемой машины.
 
+        State();
+        ~State();
+
         // Удобные и сокращающие длину кода обёртки над ReadWord() и WriteWord(), работающие с Memory.
         inline uint32_t getWord(size_t Address);
         inline void setWord(uint32_t Value, size_t Address);
-
-        State();
-        ~State();
     };
 
 
@@ -130,14 +105,37 @@ namespace FUPM2EMU
     class Executor
     {
     public:
-        Executor(State* initState);
+        // Коды исключений исполнителя.
+        enum class Exception
+        {
+            OK           = 0, // OK.
+            MACHINE      = 1, // Исключение, сгенерированное эмулируемой машиной.
+            INVALIDSTATE = 2, // Исключение, вызванное невалидным состоянием эмулируемой машины.
+        };
+
+        // Коды, возвращаемые исполнителем эмулятору.
+        enum class ReturnCode
+        {
+            OK        = 0, // Продолжение работы.
+            TERMINATE = 1, // Штатное завершение.
+            WARNING   = 2, // Не описанная в спецификации потенциально опасная работа.
+            ERROR     = 3, // Критическая ошибка.
+        };
+
+        Executor();
         ~Executor();
 
         // Выполнение комманды.
-        inline OP_RETURNCODE operator [](uint32_t Command);
+        inline ReturnCode operator ()(uint32_t Command, State &OperatedState);
 
     protected:
-        State* OperatedState; // Прикреплённое состояние эмулируемой машины (что-то мне эта иерархическая паутина уже не нравится).
+        // Коды испключений при выполнении операции.
+        enum class OperationException
+        {
+            OK         = 0, // OK.
+            INVALIDREG = 1, // Доступ к несуществующим регистрам.
+            DIVBYZERO  = 2, // Деление на ноль.
+        };
 
     private:
 
@@ -152,10 +150,10 @@ namespace FUPM2EMU
         Emulator();
         ~Emulator();
 
-        int Translate(); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
-        int Run();       // Выполнить текущее состояние.
+        int Run(); // Выполнить текущее состояние.
 
-        int LoadState(std::fstream &FileStream); // Загрузка состояния из потока файла.
+        int LoadState(std::fstream &FileStream);     // Загрузка состояния из потока файла.
+        int AssembleState(std::fstream &FileStream); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
 
     protected:
         State CurrentState; // Текущее состояние машины.

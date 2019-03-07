@@ -1,5 +1,6 @@
 #include"../include/FUPM2EMU.h"
 #include<iostream>
+#include<map>
 #include<cstdio>
 #include<cstring>
 
@@ -56,9 +57,9 @@ namespace FUPM2EMU
 
     //////////////// EXECUTOR ////////////////
     // PUBLIC:
-    Executor::Executor(State* initState)
+    Executor::Executor()
     {
-        OperatedState = initState;
+        // ...
     }
     Executor::~Executor()
     {
@@ -66,7 +67,7 @@ namespace FUPM2EMU
     }
 
     // Выполнение комманды.
-    inline OP_RETURNCODE Executor::operator [](uint32_t Command)
+    inline Executor::ReturnCode Executor::operator ()(uint32_t Command, State &OperatedState)
     {
         // Быстрее вычислить все возможные операнды сразу, чем использовать if else.
         OPERATION_CODE Operation = OPERATION_CODE((Command >> 24) & 0xFF);
@@ -75,7 +76,7 @@ namespace FUPM2EMU
         int32_t Imm16 = Command & 0x0FFFF;
         int32_t Imm20 = Command & 0xFFFFF;
 
-        OP_RETURNCODE ReturnCode = OP_OK;
+        ReturnCode ReturnCode = ReturnCode::OK;
 
         #ifdef EXECUTION_DEBUG_OUTPUT
         std::cout << "OPCODE: " << Operation << std::endl;
@@ -90,7 +91,7 @@ namespace FUPM2EMU
                 // HALT - выключение процессора.
                 case HALT:
                 {
-                    ReturnCode = OP_TERMINATE;
+                    ReturnCode = ReturnCode::TERMINATE;
                     break;
                 }
 
@@ -102,31 +103,31 @@ namespace FUPM2EMU
                         // EXIT - выход.
                         case 0:
                         {
-                            ReturnCode = OP_TERMINATE;
+                            ReturnCode = ReturnCode::TERMINATE;
                             break;
                         }
                         // SCANINT - запрос целого числа.
                         case 100:
                         {
-                            std::cin >> OperatedState->Registers[R1];
+                            std::cin >> OperatedState.Registers[R1];
                             break;
                         }
                         // PRINTINT - вывод целого числа.
                         case 102:
                         {
-                            std::cout << OperatedState->Registers[R1];
+                            std::cout << OperatedState.Registers[R1];
                             break;
                         }
                         // PUTCHAR - вывод символа.
                         case 105:
                         {
-                            putchar(uint8_t(OperatedState->Registers[R1]));
+                            putchar(uint8_t(OperatedState.Registers[R1]));
                             break;
                         }
                         // Использован неспецифицированный код системного вызова.
                         default:
                         {
-                            ReturnCode = OP_ERROR;
+                            ReturnCode = ReturnCode::ERROR;
                             break;
                         }
                     }
@@ -136,28 +137,28 @@ namespace FUPM2EMU
                 // ADD - сложение регистров.
                 case ADD:
                 {
-                    OperatedState->Registers[R1] += OperatedState->Registers[R2] + Imm16;
+                    OperatedState.Registers[R1] += OperatedState.Registers[R2] + Imm16;
                     break;
                 }
 
                 // ADDI - прибавление к регистру непосредственного операнда.
                 case ADDI:
                 {
-                    OperatedState->Registers[R1] += Imm20;
+                    OperatedState.Registers[R1] += Imm20;
                     break;
                 }
 
                 // SUB - разность регистров.
                 case SUB:
                 {
-                    OperatedState->Registers[R1] -= OperatedState->Registers[R2] + Imm16;
+                    OperatedState.Registers[R1] -= OperatedState.Registers[R2] + Imm16;
                     break;
                 }
 
                 // SUBI - вычитание из регистра непосредственного операнда.
                 case SUBI:
                 {
-                    OperatedState->Registers[R1] -= Imm20;
+                    OperatedState.Registers[R1] -= Imm20;
                     break;
                 }
 
@@ -165,11 +166,11 @@ namespace FUPM2EMU
                 case MUL:
                 {
                     // Результат умножения приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
 
-                    int64_t Product = int64_t(OperatedState->Registers[R1]) * int64_t(OperatedState->Registers[R2] + Imm16);
-                    OperatedState->Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState->Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
+                    int64_t Product = int64_t(OperatedState.Registers[R1]) * int64_t(OperatedState.Registers[R2] + Imm16);
+                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
+                    OperatedState.Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
                     break;
                 }
 
@@ -177,11 +178,11 @@ namespace FUPM2EMU
                 case MULI:
                 {
                     // Результат умножения приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
 
-                    int64_t Product = int64_t(OperatedState->Registers[R1]) * int64_t(Imm20);
-                    OperatedState->Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState->Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
+                    int64_t Product = int64_t(OperatedState.Registers[R1]) * int64_t(Imm20);
+                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
+                    OperatedState.Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
                     break;
                 }
 
@@ -189,22 +190,22 @@ namespace FUPM2EMU
                 case DIV:
                 {
                     // Результат деления приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
                     // Происходит деление на ноль.
-                    if (!OperatedState->Registers[R2]) { throw(OPEX_DIVBYZERO); }
+                    if (!OperatedState.Registers[R2]) { throw(OperationException::DIVBYZERO); }
 
-                    int64_t Divident = int64_t(OperatedState->Registers[R1] | (int64_t(OperatedState->Registers[R1 + 1]) << BitsInWord));
-                    int64_t Divider = int64_t(OperatedState->Registers[R2]);
+                    int64_t Divident = int64_t(OperatedState.Registers[R1] | (int64_t(OperatedState.Registers[R1 + 1]) << BitsInWord));
+                    int64_t Divider = int64_t(OperatedState.Registers[R2]);
                     int64_t Product = Divident / Divider;
 
                     // Результат деления не помещается в регистр. По спецификации - деление на ноль.
                     //std::cout << Product << std::endl;
-                    if (Product > 0x00000000FFFFFFFF) { throw(OPEX_DIVBYZERO); }
+                    if (Product > 0x00000000FFFFFFFF) { throw(OperationException::DIVBYZERO); }
 
                     int64_t Remainder = Divident % Divider;
 
-                    OperatedState->Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState->Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
+                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
+                    OperatedState.Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
                     break;
                 }
 
@@ -212,60 +213,60 @@ namespace FUPM2EMU
                 case DIVI:
                 {
                     // Результат деления приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OPEX_INVALIDREG); }
+                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
                     // Происходит деление на ноль.
-                    if (!Imm20) { throw(OPEX_DIVBYZERO); }
+                    if (!Imm20) { throw(OperationException::DIVBYZERO); }
 
-                    int64_t Divident = int64_t(OperatedState->Registers[R1] | (int64_t(OperatedState->Registers[R1 + 1]) << BitsInWord));
+                    int64_t Divident = int64_t(OperatedState.Registers[R1] | (int64_t(OperatedState.Registers[R1 + 1]) << BitsInWord));
                     int64_t Divider = int64_t(Imm20);
                     int64_t Product = Divident / Divider;
 
                     // Результат деления не помещается в регистр. По спецификации - деление на ноль.
                     //std::cout << Product << std::endl;
-                    if (Product > 0x00000000FFFFFFFF) { throw(OPEX_DIVBYZERO); }
+                    if (Product > 0x00000000FFFFFFFF) { throw(OperationException::DIVBYZERO); }
 
                     int64_t Remainder = Divident % Divider;
 
-                    OperatedState->Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState->Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
+                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
+                    OperatedState.Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
                     break;
                 }
 
                 // LC - загрузка константы в регистр.
                 case LC:
                 {
-                    OperatedState->Registers[R1] = Imm20;
+                    OperatedState.Registers[R1] = Imm20;
                     break;
                 }
                 default:
                 {
-                    ReturnCode = OP_ERROR;
+                    ReturnCode = ReturnCode::ERROR;
                     break;
                 }
             }
         }
-        catch (OP_EXCEPTION Exception)
+        catch (OperationException Exception)
         {
             switch(Exception)
             {
-                case OPEX_OK: { break; }
-                case OPEX_INVALIDREG:
+                case OperationException::OK: { break; }
+                case OperationException::INVALIDREG:
                 {
                     std::cerr << "[EXECUTION ERROR]: access to an invalid register." << std::endl;
-                    throw(EXEX_INVALIDSTATE);
+                    throw(Exception::INVALIDSTATE);
                     break;
                 }
-                case OPEX_DIVBYZERO:
+                case OperationException::DIVBYZERO:
                 {
                     std::cerr << "[EXECUTION ERROR]: division by zero." << std::endl;
-                    throw(EXEX_MACHINE);
+                    throw(Exception::MACHINE);
                     break;
                 }
                 default: { break; }
             }
         }
 
-        ++(OperatedState->Registers[15]);
+        ++(OperatedState.Registers[15]);
         return(ReturnCode);
     }
 
@@ -276,9 +277,9 @@ namespace FUPM2EMU
 
     //////////////// EMULATOR ////////////////
     // PUBLIC:
-    Emulator::Emulator() : Execute(&CurrentState)
+    Emulator::Emulator()
     {
-
+        // ...
     }
     Emulator::~Emulator()
     {
@@ -287,11 +288,11 @@ namespace FUPM2EMU
 
     int Emulator::Run()
     {
-        int ReturnCode = 0;    // Код возврата операции.
-        uint32_t Command = 0;  // 32 бита под команду.
+        Executor::ReturnCode ReturnCode = Executor::ReturnCode::OK; // Код возврата операции.
+        uint32_t Command = 0; // 32 бита под команду.
 
         // Пока все хорошо.
-        while(ReturnCode == OP_OK)
+        while(ReturnCode == Executor::ReturnCode::OK)
         {
             Command = CurrentState.getWord(CurrentState.Registers[15]); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
 
@@ -302,19 +303,19 @@ namespace FUPM2EMU
 
             try
             {
-                ReturnCode = Execute[Command];
+                ReturnCode = Execute(Command, CurrentState);
             }
-            catch (EXECUTOR_EXCEPTION Exception)
+            catch (Executor::Exception Exception)
             {
                 switch(Exception)
                 {
-                    case EXEX_OK: { break; }
-                    case EXEX_MACHINE:
+                    case Executor::Exception::OK: { break; }
+                    case Executor::Exception::MACHINE:
                     {
                         std::cerr << "[EMULATOR ERROR]: emulated machine has thrown an exception." << std::endl;
                         break;
                     }
-                    case EXEX_INVALIDSTATE:
+                    case Executor::Exception::INVALIDSTATE:
                     {
                         std::cerr << "[EMULATOR ERROR]: machine state has become invalid." << std::endl;
                         break;
@@ -366,6 +367,11 @@ namespace FUPM2EMU
             ++Address;
         }
 
+        return(0);
+    }
+
+    int Emulator::AssembleState(std::fstream &FileStream)
+    {
         return(0);
     }
 
