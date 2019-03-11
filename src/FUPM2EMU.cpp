@@ -44,7 +44,7 @@ namespace FUPM2EMU
         // ...
     }
 
-    int State::Load(std::fstream &FileStream)
+    int State::load(std::fstream &FileStream)
     {
         // Первые 16 * 4 + 1 байт - регистры + регистр флагов, остальное до конца файла - память.
         char Bytes[BytesInWord];
@@ -104,8 +104,11 @@ namespace FUPM2EMU
     }
 
     // Выполнение комманды.
-    inline Executor::ReturnCode Executor::operator ()(uint32_t Command, State &OperatedState)
+    inline Executor::ReturnCode Executor::step(State &OperatedState)
     {
+        // Извлечение следующией команды.
+        uint32_t Command = OperatedState.getWord(OperatedState.Registers[15]);
+
         // Быстрее вычислить все возможные операнды сразу, чем использовать if else.
         OPERATION_CODE Operation = OPERATION_CODE((Command >> 24) & 0xFF);
         uint8_t R1 = (Command >> 20) & 0xF;
@@ -326,21 +329,13 @@ namespace FUPM2EMU
     int Emulator::Run()
     {
         Executor::ReturnCode ReturnCode = Executor::ReturnCode::OK; // Код возврата операции.
-        uint32_t Command = 0; // 32 бита под команду.
 
         // Пока все хорошо.
         while(ReturnCode == Executor::ReturnCode::OK)
         {
-            Command = MainState.getWord(MainState.Registers[15]); // Чтение слова по адресу в R15 (в байтах - по адресу R15 * 4).
-
-            #ifdef EXECUTION_DEBUG_OUTPUT
-            std::cout << "R15: " << State.Registers[15] << std::endl;
-            std::cout << "Command: 0x" << std::hex << Command << std::dec <<  std::endl;
-            #endif
-
             try
             {
-                ReturnCode = MainExecutor(Command, MainState);
+                ReturnCode = executor.step(state);
             }
             catch (Executor::Exception Exception)
             {

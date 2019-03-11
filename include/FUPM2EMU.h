@@ -96,7 +96,7 @@ namespace FUPM2EMU
         ~State();
 
         // Загрузка состояния из потока файла.
-        int Load(std::fstream &FileStream);
+        int load(std::fstream &FileStream);
 
         // Удобные и сокращающие длину кода обёртки над ReadWord() и WriteWord(), работающие с Memory.
         inline uint32_t getWord(size_t Address);
@@ -134,8 +134,8 @@ namespace FUPM2EMU
         Executor();
         ~Executor();
 
-        // Выполнение комманды.
-        inline ReturnCode operator ()(uint32_t Command, State &OperatedState);
+        // Выполнение команды.
+        inline ReturnCode step(State &OperatedState);
 
     protected:
         // Коды испключений при выполнении операции.
@@ -156,16 +156,16 @@ namespace FUPM2EMU
     class Emulator
     {
     public:
-        State MainState;       // Текущее состояние машины.
-        Executor MainExecutor; // Исполнитель команд.
+        State state;       // Текущее состояние машины.
+        Executor executor; // Исполнитель команд.
 
         Emulator();
         ~Emulator();
 
         int Run(); // Выполнить текущее состояние.
 
-        int LoadState(std::fstream &FileStream);     // Загрузка состояния из потока файла.
-        int AssembleState(std::fstream &FileStream); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
+        //int LoadState(std::fstream &FileStream);     // Загрузка состояния из потока файла.
+        //int AssembleState(std::fstream &FileStream); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
 
     protected:
 

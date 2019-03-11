@@ -60,7 +60,7 @@ int main(int argc,  char *argv[])
         FileStream.open(StateFilePath, std::fstream::in);
         if (FileStream.is_open())
         {
-            FUPM2.MainState.Load(FileStream);
+            FUPM2.state.load(FileStream);
             FileStream.close();
         }
         else
