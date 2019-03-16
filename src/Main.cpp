@@ -3,11 +3,11 @@
 #include<string>
 #include<fstream>
 
-enum CLIException
+enum class CLIException
 {
-    CLI_OK         = 0,
-    CLI_DOUBLELOAD = 1,
-    CLI_NOFILEPATH = 2,
+    OK         = 0,
+    DOUBLELOAD = 1,
+    NOFILEPATH = 2,
 };
 
 int main(int argc,  char *argv[])
@@ -23,8 +23,8 @@ int main(int argc,  char *argv[])
             // Загрузка состояния эмулятора из файла.
             if ((Argument == "--load") || (Argument == "-l"))
             {
-                if (!StateFilePath.empty()) { throw(CLI_DOUBLELOAD); }
-                if (i + 1 >= argc) { throw(CLI_NOFILEPATH); }
+                if (!StateFilePath.empty()) { throw(CLIException::DOUBLELOAD); }
+                if (i + 1 >= argc) { throw(CLIException::NOFILEPATH); }
 
                 StateFilePath = argv[i+1];
                 ++i;
@@ -35,13 +35,13 @@ int main(int argc,  char *argv[])
     {
         switch(Exception)
         {
-            case CLI_OK: { break; }
-            case CLI_DOUBLELOAD:
+            case CLIException::OK: { break; }
+            case CLIException::DOUBLELOAD:
             {
                 std::cerr << "Error: state file path has been already defined." << std::endl;
                 break;
             }
-            case CLI_NOFILEPATH:
+            case CLIException::NOFILEPATH:
             {
                 std::cerr << "Error: state file path was not passed." << std::endl;
             }

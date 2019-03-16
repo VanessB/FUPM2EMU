@@ -1,6 +1,5 @@
 #include"../include/FUPM2EMU.h"
 #include<iostream>
-#include<map>
 #include<cstdio>
 #include<cstring>
 
@@ -308,6 +307,70 @@ namespace FUPM2EMU
 
         ++(OperatedState.Registers[15]);
         return(ReturnCode);
+    }
+
+    // PROTECTED:
+
+    // PRIVATE:
+
+
+    /////////////// TRANSLATOR ///////////////
+    // PUBLIC:
+    Translator::Translator()
+    {
+        // Таблица, связывающая имя операции, её код и тип.
+        std::vector<std::tuple<std::string, int, int>> TranslationTable =
+        {
+            {"halt",    HALT,    RI},
+            {"syscall", SYSCALL, RI},
+            {"add",     ADD,     RR},
+            {"addi",    ADDI,    RI},
+            {"sub",     SUB,     RR},
+            {"subi",    SUBI,    RI},
+            {"mul",     MUL,     RR},
+            {"muli",    MULI,    RI},
+            {"div",     DIV,     RR},
+            {"divi",    DIVI,    RI},
+            {"lc",      LC,      RI}
+        };
+
+        // Заполнение отображений.
+        for (size_t i = 0; i < TranslationTable.size(); ++i)
+        {
+            OpCode.insert({ std::get<0>(TranslationTable[i]), std::get<1>(TranslationTable[i]) });
+            OpType.insert({ std::get<0>(TranslationTable[i]), std::get<2>(TranslationTable[i]) });
+        }
+
+        // Инициализация отображения имён регистров в их коды.
+        RegCode =
+        {
+            {"r0",  0 },
+            {"r1",  1 },
+            {"r2",  2 },
+            {"r3",  3 },
+            {"r4",  4 },
+            {"r5",  5 },
+            {"r6",  6 },
+            {"r7",  7 },
+            {"r8",  8 },
+            {"r9",  9 },
+            {"r10", 10},
+            {"r11", 11},
+            {"r12", 12},
+            {"r13", 13},
+            {"r14", 14},
+            {"r15", 15}
+        };
+    }
+    Translator::~Translator()
+    {
+        // ...
+    }
+
+    int Translator::Assemble(std::fstream &FileStream, FUPM2EMU::State &OperatedState)
+    {
+
+        return(0);
     }
 
     // PROTECTED:

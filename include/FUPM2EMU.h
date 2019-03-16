@@ -1,9 +1,8 @@
 #pragma once
 #include<cstdint>    // Целочисленные типы фиксированной длины.
-#include<memory>     // Умные указатели.
-#include<vector>     // vector
-#include<functional> // function
-#include<fstream>    // file stream
+#include<vector>     // vector.
+#include<map>        // map.
+#include<fstream>    // file stream.
 
 
 // НЕБОЛЬШОЙ КОММЕНТАРИЙ КАСАТЕЛЬНО РАБОТЫ С ПАМЯТЬЮ.
@@ -66,6 +65,15 @@ namespace FUPM2EMU
         LOADR2  = 69,
         STORER  = 70,
         STORER2 = 71
+    };
+
+    // Типы операций.
+    enum OPERATION_TYPE
+    {
+        RI = 0,
+        RR = 1,
+        RM = 2,
+        J  = 3
     };
 
     ////////////////
@@ -145,6 +153,28 @@ namespace FUPM2EMU
             INVALIDREG = 1, // Доступ к несуществующим регистрам.
             DIVBYZERO  = 2, // Деление на ноль.
         };
+
+    private:
+
+    };
+
+
+    /////////////// TRANSLATOR ///////////////
+    // Транслятор из языка assembler в машинный код и обратно.
+    class Translator
+    {
+    public:
+        Translator();
+        ~Translator();
+
+        int Assemble(std::fstream &FileStream, State &OperatedState);    // Ассемблирование кода из файла.
+        int Disassemble(State &OperatedState, std::fstream &FileSTream); // Дизассемблирование состояния в файл.
+
+    protected:
+        //std::vector<std::tuple<std::string, int, int>> TranslationTable; // Таблица, связывающая имя операции, её код и тип.
+        std::map<std::string, int> OpCode;  // Отображение из имени операции в её код.
+        std::map<std::string, int> OpType;  // Отображение из имени операции в её тип.
+        std::map<std::string, int> RegCode; // Отображение из имени регистра в его код.
 
     private:
 
