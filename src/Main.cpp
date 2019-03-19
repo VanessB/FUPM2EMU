@@ -3,16 +3,25 @@
 #include<string>
 #include<fstream>
 
-enum class CLIException
-{
-    OK         = 0,
-    DOUBLELOAD = 1,
-    NOFILEPATH = 2,
-};
-
 int main(int argc,  char *argv[])
 {
-    std::string StateFilePath;
+    enum class ArgsException
+    {
+        OK         = 0, // Все нормально.
+        INCOMPARGS = 1, // Несовместимые аргументы.
+        NOFILEPATH = 2, // Не указан путь.
+    };
+
+    enum class FileMode
+    {
+        DEFAULT  = 0, // Без загрузки файлов.
+        STATE    = 1, // Загрузка состояния памяти.
+        ASSEMBLE = 2, // Загрузка и трансляция исходного кода.
+    };
+
+    std::string FilePath;
+    FileMode InitMode = FileMode::DEFAULT;
+
     try
     {
         std::string Argument;
@@ -23,27 +32,39 @@ int main(int argc,  char *argv[])
             // Загрузка состояния эмулятора из файла.
             if ((Argument == "--load") || (Argument == "-l"))
             {
-                if (!StateFilePath.empty()) { throw(CLIException::DOUBLELOAD); }
-                if (i + 1 >= argc) { throw(CLIException::NOFILEPATH); }
+                if (InitMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
+                if (i + 1 >= argc) { throw(ArgsException::NOFILEPATH); }
 
-                StateFilePath = argv[i+1];
+                InitMode = FileMode::STATE;
+                FilePath = argv[i+1];
+                ++i;
+            }
+
+            // Ассемблирование исходного кода из файла в состояние эмулятора.
+            if ((Argument == "--assemble") || (Argument == "-a"))
+            {
+                if (InitMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
+                if (i + 1 >= argc) { throw(ArgsException::NOFILEPATH); }
+
+                InitMode = FileMode::ASSEMBLE;
+                FilePath = argv[i+1];
                 ++i;
             }
         }
     }
-    catch (CLIException Exception)
+    catch (ArgsException Exception)
     {
         switch(Exception)
         {
-            case CLIException::OK: { break; }
-            case CLIException::DOUBLELOAD:
+            case ArgsException::OK: { break; }
+            case ArgsException::INCOMPARGS:
             {
-                std::cerr << "Error: state file path has been already defined." << std::endl;
+                std::cerr << "Error: incompatable arguments." << std::endl;
                 break;
             }
-            case CLIException::NOFILEPATH:
+            case ArgsException::NOFILEPATH:
             {
-                std::cerr << "Error: state file path was not passed." << std::endl;
+                std::cerr << "Error: file path has not been passed." << std::endl;
             }
         }
 
@@ -53,22 +74,50 @@ int main(int argc,  char *argv[])
     // Экземпляр эмулятора.
     FUPM2EMU::Emulator FUPM2;
 
-    if (!StateFilePath.empty())
+    if (!FilePath.empty())
     {
-        // Загрузка файла состояния, передача потока файла эмулятору.
-        std::fstream FileStream;
-        FileStream.open(StateFilePath, std::fstream::in);
-        if (FileStream.is_open())
+        switch(InitMode)
         {
-            FUPM2.state.load(FileStream);
-            FileStream.close();
-        }
-        else
-        {
-            std::cerr << "Failed to open file: " << StateFilePath << std::endl;
+            case FileMode::DEFAULT:
+            {
+                break;
+            }
+            case FileMode::STATE:
+            {
+                // Загрузка файла состояния, передача потока файла эмулятору.
+                std::fstream FileStream;
+                FileStream.open(FilePath, std::fstream::in);
+                if (FileStream.is_open())
+                {
+                    FUPM2.state.load(FileStream);
+                    FileStream.close();
+                }
+                else
+                {
+                    std::cerr << "Failed to open file: " << FilePath << std::endl;
+                }
+                break;
+            }
+            case FileMode::ASSEMBLE:
+            {
+                // Загрузка файла с исходным кодом, передача потока файла эмулятору.
+                std::fstream FileStream;
+                FileStream.open(FilePath, std::fstream::in);
+                if (FileStream.is_open())
+                {
+                    FUPM2.translator.Assemble(FileStream, FUPM2.state);
+                    FileStream.close();
+                }
+                else
+                {
+                    std::cerr << "Failed to open file: " << FilePath << std::endl;
+                }
+                break;
+            }
         }
     }
 
+    // Запуск эмуляции.
     FUPM2.Run();
     return(0);
 }

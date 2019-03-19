@@ -1,4 +1,5 @@
 #include"../include/FUPM2EMU.h"
+#include<limits>
 #include<iostream>
 #include<cstdio>
 #include<cstring>
@@ -369,7 +370,104 @@ namespace FUPM2EMU
 
     int Translator::Assemble(std::fstream &FileStream, FUPM2EMU::State &OperatedState)
     {
+        size_t WriteAddress = 0; // Адрес текущего записываемого слова в OperatedState.
+        std::string Input;       // Строка для считывания слов из входного файла.
 
+        enum class ParserState
+        {
+            IN_CODE    = 0,
+            IN_COMMENT = 1,
+        };
+        ParserState CurrentState = ParserState::IN_CODE;
+
+        // Чтение идёт до конца файла.
+        while(!FileStream.eof())
+        {
+            switch(CurrentState)
+            {
+                case ParserState::IN_CODE:
+                {
+                    if (!(FileStream >> Input)) { break; } // Проверка на успешность чтения.
+                    if (!Input.size()) { continue; }       // Проверка строки на пустоту.
+
+                    if (Input[0] == ';')
+                    {
+                        CurrentState = ParserState::IN_COMMENT;
+                        break;
+                    }
+
+                    uint32_t Word = 0; // Переменная для записываемого слова команды.
+
+                    // Парсим операцию.
+                    Word |= OpCode.at(Input) << (BitsInWord - OpCodeBits);
+
+                    // Парсим аргументы.
+                    switch(OpType.at(Input))
+                    {
+                        // Регистр и непосредственный операнд.
+                        case RI:
+                        {
+                            // Регистр.
+                            FileStream >> Input;
+                            Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits);
+
+                            // Непосредственный операнд.
+                            FileStream >> Input;
+
+                            // Проверка, число ли это.
+                            if (Input.find_first_not_of("0123456789") == std::string::npos)
+                            {
+                                // Перевод ввода в число и запись в конец слова.
+                                Word |= (std::stoi(Input) & 0xFFFFFF); // 24 бита на длинный Imm24.
+                            }
+                            break;
+                        }
+
+                        // Два регистра и короткий непосредственный операнд.
+                        case RR:
+                        {
+                            // Первый регистр.
+                            FileStream >> Input;
+                            Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits);
+
+                            // Второй регистр.
+                            FileStream >> Input;
+                            Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits - RegCodeBits);
+
+                            // Непосредственный операнд.
+                            FileStream >> Input;
+                            // Перевод ввода в число и запись в конец слова.
+                            Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на короткий Imm20.
+                            break;
+                        }
+
+                        // Регистр и адрес.
+                        case RM:
+                        {
+                            break;
+                        }
+
+                        // Адрес.
+                        case J:
+                        {
+                            break;
+                        }
+                    }
+
+                    // Запись слова.
+                    OperatedState.setWord(Word, WriteAddress);
+                    ++WriteAddress;
+                    break;
+                }
+                case ParserState::IN_COMMENT:
+                {
+                    FileStream.ignore (std::numeric_limits<std::streamsize>::max(), '\n');
+                    CurrentState = ParserState::IN_CODE;
+                    // while (!FileStream.eof() || (FileStream.get() != '\n')); // Пока не кончилась строка или файл - пропускаем...
+                    break;
+                }
+            }
+        }
         return(0);
     }
 

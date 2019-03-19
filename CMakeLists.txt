@@ -11,11 +11,11 @@ include_directories(include)
 # set(SOURCES src/main.cpp) # - Manually.
 file(GLOB SOURCES "src/*.cpp") # - Automatically.
 
-add_executable(FUPM2EMU.exe ${SOURCES}) # Using variable SOURCES.
+add_executable(FUPM2EMU ${SOURCES}) # Using variable SOURCES.
 
 # Flags for builds
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wpedantic -Wextra -fexceptions -O0 -g3 -ggdb --std=c++17")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -Wextra -O3 --std=c++17")
 
 # Math
-# target_link_libraries(FUPM2EMU.exe m)
+# target_link_libraries(FUPM2EMU m)

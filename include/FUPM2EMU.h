@@ -81,7 +81,11 @@ namespace FUPM2EMU
     // Константы.
     const unsigned char BitsInWord = 32;        // Число бит в машинном слове.
     const unsigned char BytesInWord = 4;        // Число байт в машинном слове.
+
+    const unsigned char OpCodeBits = 8;         // Число бит на код операции.
+    const unsigned char RegCodeBits = 4;        // Число бит на код регистра.
     const unsigned char AddressBits = 20;       // Число бит в адресах.
+
     const unsigned char RegistersNumber = 16;   // Количество регистров.
     const unsigned int InstructionsNumber = 72; // Количество инструкций.
     const size_t MemorySize = 1 << AddressBits; // Размер адресуемой памяти.
@@ -186,8 +190,9 @@ namespace FUPM2EMU
     class Emulator
     {
     public:
-        State state;       // Текущее состояние машины.
-        Executor executor; // Исполнитель команд.
+        State state;           // Текущее состояние машины.
+        Executor executor;     // Исполнитель команд.
+        Translator translator; // Ассемблер и дисассемблер.
 
         Emulator();
         ~Emulator();
