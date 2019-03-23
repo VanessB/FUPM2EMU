@@ -278,6 +278,14 @@ namespace FUPM2EMU
                     OperatedState.Registers[R1] = Imm20;
                     break;
                 }
+
+                // JMP - безусловный переход.
+                case JMP:
+                {
+                    OperatedState.Registers[15] = Imm20 - 1; // "-1" - костыль, связанный с тем, что после выполнения любой команды (даже JMP) R15 увеличивается на 1.
+                    break;
+                }
+
                 default:
                 {
                     ReturnCode = ReturnCode::ERROR;
@@ -317,6 +325,7 @@ namespace FUPM2EMU
 
     /////////////// TRANSLATOR ///////////////
     // PUBLIC:
+
     Translator::Translator()
     {
         // Таблица, связывающая имя операции, её код и тип.
@@ -332,7 +341,9 @@ namespace FUPM2EMU
             {"muli",    MULI,    RI},
             {"div",     DIV,     RR},
             {"divi",    DIVI,    RI},
-            {"lc",      LC,      RI}
+            {"lc",      LC,      RI},
+
+            {"jmp",     JMP,     J }
         };
 
         // Заполнение отображений.
@@ -372,6 +383,8 @@ namespace FUPM2EMU
     {
         size_t WriteAddress = 0; // Адрес текущего записываемого слова в OperatedState.
         std::string Input;       // Строка для считывания слов из входного файла.
+        std::map<std::string, size_t> MarksAddresses;          // Адреса объявленных меток (название - адрес).
+        std::vector<std::pair<size_t, std::string>> UsedMarks; // Адреса команд, использовавших метки, и имена этих меток.
 
         enum class ParserState
         {
@@ -380,98 +393,192 @@ namespace FUPM2EMU
         };
         ParserState CurrentState = ParserState::IN_CODE;
 
-        // Чтение идёт до конца файла.
-        while(!FileStream.eof())
+        try
         {
-            switch(CurrentState)
+            // Чтение идёт до конца файла.
+            while(!FileStream.eof())
             {
-                case ParserState::IN_CODE:
+                switch(CurrentState)
                 {
-                    if (!(FileStream >> Input)) { break; } // Проверка на успешность чтения.
-                    if (!Input.size()) { continue; }       // Проверка строки на пустоту.
-
-                    if (Input[0] == ';')
+                    // В коде.
+                    case ParserState::IN_CODE:
                     {
-                        CurrentState = ParserState::IN_COMMENT;
+                        // Считываем строку-слово.
+                        if (!(FileStream >> Input)) { break; } // Проверка на успешность чтения.
+                        if (!Input.size()) { break; }          // Проверка строки на пустоту.
+
+                        // Начинается на ";" - входим в состояние "в комментарии" (до новой строки).
+                        if (Input[0] == ';')
+                        {
+                            CurrentState = ParserState::IN_COMMENT;
+                            break;
+                        }
+
+                        // Если слово оканчивается на ':', оно является меткой.
+                        if (Input[Input.size() - 1] == ':')
+                        {
+                            Input.pop_back(); // Удаляем последний символ - ':'.
+                            MarksAddresses.insert({ Input, WriteAddress });
+                            break;
+                        }
+
+                        // Если встретилась директива "end", запоминаем метку старта программы. Так как эта директива обязана быть в конце программы,
+                        // к моменту её чтения метка уже точно должна существовать. Тогда можно сразу проинициализировать нужным значением регистр R15.
+                        if (Input == "end")
+                        {
+                            if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSMARK)); } // Чтение имени метки.
+                            try { OperatedState.Registers[15] = MarksAddresses.at(Input); }
+                            catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::MARK)); }
+                            break;
+                        }
+
+
+                        // К этому моменту уже точно известно, что считанное слово должно быть именем операции. Тогда начинаем разбирать её и её аргументы.
+                        uint32_t Word = 0; // Создаём переменную для записываемого слова команды.
+
+                        // Парсим операцию.
+                        try {Word |= OpCode.at(Input) << (BitsInWord - OpCodeBits); }
+                        catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::OPCODE)); }
+
+                        // Парсим аргументы.
+                        switch(OpType.at(Input))
+                        {
+                            // Регистр и непосредственный операнд.
+                            case RI:
+                            {
+                                // Регистр.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+
+                                // Непосредственный операнд.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+
+                                // Проверка, число ли это.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    // Перевод ввода в число и запись в конец слова.
+                                    Word |= (std::stoi(Input) & 0xFFFFFF); // 24 бита на длинный Imm24.
+                                }
+                                break;
+                            }
+
+                            // Два регистра и короткий непосредственный операнд.
+                            case RR:
+                            {
+                                // Первый регистр.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+
+                                // Второй регистр.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits - RegCodeBits); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+
+                                // Непосредственный операнд.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+                                // Перевод ввода в число и запись в конец слова.
+                                Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на короткий Imm20.
+                                break;
+                            }
+
+                            // Регистр и адрес.
+                            case RM:
+                            {
+                                break;
+                            }
+
+                            // Адрес.
+                            case J:
+                            {
+                                // Непосредственный операнд - метка.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSMARK)); }
+                                // Запоминаем адрес команды для последующей подстановки адреса метки.
+                                UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input));
+                                break;
+                            }
+                        }
+
+                        // Запись слова.
+                        OperatedState.setWord(Word, WriteAddress);
+                        ++WriteAddress;
                         break;
                     }
 
-                    uint32_t Word = 0; // Переменная для записываемого слова команды.
-
-                    // Парсим операцию.
-                    Word |= OpCode.at(Input) << (BitsInWord - OpCodeBits);
-
-                    // Парсим аргументы.
-                    switch(OpType.at(Input))
+                    // В комментарии.
+                    case ParserState::IN_COMMENT:
                     {
-                        // Регистр и непосредственный операнд.
-                        case RI:
-                        {
-                            // Регистр.
-                            FileStream >> Input;
-                            Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits);
-
-                            // Непосредственный операнд.
-                            FileStream >> Input;
-
-                            // Проверка, число ли это.
-                            if (Input.find_first_not_of("0123456789") == std::string::npos)
-                            {
-                                // Перевод ввода в число и запись в конец слова.
-                                Word |= (std::stoi(Input) & 0xFFFFFF); // 24 бита на длинный Imm24.
-                            }
-                            break;
-                        }
-
-                        // Два регистра и короткий непосредственный операнд.
-                        case RR:
-                        {
-                            // Первый регистр.
-                            FileStream >> Input;
-                            Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits);
-
-                            // Второй регистр.
-                            FileStream >> Input;
-                            Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits - RegCodeBits);
-
-                            // Непосредственный операнд.
-                            FileStream >> Input;
-                            // Перевод ввода в число и запись в конец слова.
-                            Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на короткий Imm20.
-                            break;
-                        }
-
-                        // Регистр и адрес.
-                        case RM:
-                        {
-                            break;
-                        }
-
-                        // Адрес.
-                        case J:
-                        {
-                            break;
-                        }
+                        FileStream.ignore (std::numeric_limits<std::streamsize>::max(), '\n'); // Пропускаем ввод до первого символа новой строки.
+                        CurrentState = ParserState::IN_CODE;
+                        break;
                     }
+                }
+            }
 
-                    // Запись слова.
-                    OperatedState.setWord(Word, WriteAddress);
-                    ++WriteAddress;
+            // Теперь проходим по всем использованным меткам и подставляем адреса.
+            for(size_t i = 0; i < UsedMarks.size(); ++i)
+            {
+                // Читаем слово-команду, вставляем адрес и записываем.
+                uint32_t Word = OperatedState.getWord(UsedMarks[i].first);
+                try { Word |= MarksAddresses.at(UsedMarks[i].second); }
+                catch (std::out_of_range) { throw(AssemblingException(UsedMarks[i].first, AssemblingException::Code::MARK)); }
+                OperatedState.setWord(Word, UsedMarks[i].first);
+            }
+        }
+        catch(AssemblingException Exception)
+        {
+            std::cerr << "[TRANSLATOR ERROR]: error assembling command " << Exception.address + 1 << "." << std::endl;
+            switch(Exception.code)
+            {
+                case AssemblingException::Code::OK: { break; }
+                case AssemblingException::Code::OPCODE:
+                {
+                    std::cerr << "Unknown operation code." << std::endl;
                     break;
                 }
-                case ParserState::IN_COMMENT:
+                case AssemblingException::Code::REGCODE:
                 {
-                    FileStream.ignore (std::numeric_limits<std::streamsize>::max(), '\n');
-                    CurrentState = ParserState::IN_CODE;
-                    // while (!FileStream.eof() || (FileStream.get() != '\n')); // Пока не кончилась строка или файл - пропускаем...
+                    std::cerr << "Unknown register name." << std::endl;
+                    break;
+                }
+                case AssemblingException::Code::ARGSREG:
+                {
+                    std::cerr << "Register argument was not specified." << std::endl;
+                    break;
+                }
+                case AssemblingException::Code::ARGSIMM:
+                {
+                    std::cerr << "Immediate argument was not specified." << std::endl;
+                    break;
+                }
+                case AssemblingException::Code::ARGSMARK:
+                {
+                    std::cerr << "Mark argument was not specified." << std::endl;
+                    break;
+                }
+                case AssemblingException::Code::MARK:
+                {
+                    std::cerr << "Unspecified mark was used." << std::endl;
                     break;
                 }
             }
+
+            throw(Exception::ASSEMBLING);
         }
+
         return(0);
     }
 
     // PROTECTED:
+
+    //////// ASSEMBLING EXCEPTION ////////
+    Translator::AssemblingException::AssemblingException(size_t initAddress, Translator::AssemblingException::Code initCode) // Инициализация экземпляра исключения.
+    {
+        address = initAddress;
+        code = initCode;
+    }
+
 
     // PRIVATE:
 

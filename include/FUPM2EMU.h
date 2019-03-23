@@ -168,6 +168,12 @@ namespace FUPM2EMU
     class Translator
     {
     public:
+        enum class Exception
+        {
+            OK         = 0, // OK.
+            ASSEMBLING = 1, // Ошибка при ассемблировании.
+        };
+
         Translator();
         ~Translator();
 
@@ -179,6 +185,28 @@ namespace FUPM2EMU
         std::map<std::string, int> OpCode;  // Отображение из имени операции в её код.
         std::map<std::string, int> OpType;  // Отображение из имени операции в её тип.
         std::map<std::string, int> RegCode; // Отображение из имени регистра в его код.
+
+        // Целая структура для обработки исключений.
+        struct AssemblingException
+        {
+            // Коды исключений
+            enum class Code
+            {
+                OK       = 0, // OK.
+                OPCODE   = 1, // Несуществующий код операции.
+                REGCODE  = 2, // Несуществующий код регистра.
+                ARGSREG  = 3, // Ожидалось имя регистра.
+                ARGSIMM  = 4, // Ожидался численный непосредственный операнд.
+                ARGSMARK = 5, // Ожидалось имя метки.
+                MARK     = 6, // Несуществующее имя метки.
+            };
+
+            size_t address; // Адресс срабатывания (адресс записанной операции).
+            Code code;      // Код исключения.
+
+            // Все переменные в обязательном порядке инициализируются кконструктором.
+            AssemblingException(size_t initAddress, Code initCode);
+        };
 
     private:
 
