@@ -5,7 +5,8 @@
 #include<cstring>
 
 //#define EXECUTION_DEBUG_OUTPUT
-//#define LODINGSTATE_DEBUG_OUTPUT
+//#define LOADINGSTATE_DEBUG_OUTPUT
+//#define ASSEMBLING_DEBUG_OUTPUT
 
 namespace FUPM2EMU
 {
@@ -120,7 +121,9 @@ namespace FUPM2EMU
 
         #ifdef EXECUTION_DEBUG_OUTPUT
         std::cout << "OPCODE: " << Operation << std::endl;
-        std::cout << "Registers: " << "R" << (unsigned int)R1 << " R" << (unsigned int)R2 << std::endl;
+        std::cout << "Registers:"
+                  << " R" << (unsigned int)R1 << ": " << OperatedState.Registers[R1]
+                  << " R" << (unsigned int)R2 << ": " << OperatedState.Registers[R2] << std::endl;
         std::cout << "Immediates: " << "Imm16: " << Imm16 << " Imm20: " << Imm20 << std::endl;
         #endif
 
@@ -174,6 +177,7 @@ namespace FUPM2EMU
                     break;
                 }
 
+                // ЦЕЛОЧИСЛЕННЫЕ ОПЕРАЦИИ.
                 // ADD - сложение регистров.
                 case ADD:
                 {
@@ -272,6 +276,7 @@ namespace FUPM2EMU
                     break;
                 }
 
+                // КОПИРОВАНИЕ В РЕГИСТРЫ.
                 // LC - загрузка константы в регистр.
                 case LC:
                 {
@@ -279,10 +284,166 @@ namespace FUPM2EMU
                     break;
                 }
 
+                // MOV - пересылка из одного регистра в другой.
+                case MOV:
+                {
+                    OperatedState.Registers[R1] = OperatedState.Registers[R2] + Imm16;
+                    break;
+                }
+
+                // СДВИГИ.
+                // SHL - сдвиг влево на занчение регистра.
+                case SHL:
+                {
+                    OperatedState.Registers[R1] <<= OperatedState.Registers[R2] + Imm16;
+                    break;
+                }
+
+                // SHLI - сдвиг влево на непосредственный операнд.
+                case SHLI:
+                {
+                    OperatedState.Registers[R1] <<= Imm20;
+                    break;
+                }
+
+                // SHR - сдвиг вправо на занчение регистра.
+                case SHR:
+                {
+                    OperatedState.Registers[R1] >>= OperatedState.Registers[R2] + Imm16;
+                    break;
+                }
+
+                // SHRI - сдвиг вправо на непосредственный операнд.
+                case SHRI:
+                {
+                    OperatedState.Registers[R1] >>= Imm20;
+                    break;
+                }
+
+                // ЛОГИЕСКИЕ ОПЕРАЦИИ.
+                // AND - побитовое И между регистрами.
+                case AND:
+                {
+                    OperatedState.Registers[R1] &= OperatedState.Registers[R2] + Imm16;
+                    break;
+                }
+
+                // ANDI - побитовое И между регистром и непосредственным операндом.
+                case ANDI:
+                {
+                    OperatedState.Registers[R1] &= Imm20;
+                    break;
+                }
+
+                // OR - побитовое ИЛИ между регистрами.
+                case OR:
+                {
+                    OperatedState.Registers[R1] |= OperatedState.Registers[R2] + Imm16;
+                    break;
+                }
+
+                // ORI - побитовое ИЛИ между регистром и непосредственным операндом.
+                case ORI:
+                {
+                    OperatedState.Registers[R1] |= Imm20;
+                    break;
+                }
+
+                // XOR - побитовое ИСКЛЮЧАЮЩЕЕ ИЛИ между регистрами.
+                case XOR:
+                {
+                    OperatedState.Registers[R1] ^= OperatedState.Registers[R2] + Imm16;
+                    break;
+                }
+
+                // XORI - побитовое ИСКЛЮЧАЮЩЕЕ ИЛИ между регистром и непосредственным операндом.
+                case XORI:
+                {
+                    OperatedState.Registers[R1] ^= Imm20;
+                    break;
+                }
+
+                // NOT - побитовое НЕ.
+                case NOT:
+                {
+                    OperatedState.Registers[R1] = ~(OperatedState.Registers[R1]);
+                    break;
+                }
+
+                // СТЕК.
+                // PUSH - помещение значения регистра в стек.
+                case PUSH:
+                {
+                    --OperatedState.Registers[14];
+                    OperatedState.setWord(OperatedState.Registers[R1] + Imm20, OperatedState.Registers[14]);
+                    break;
+                }
+
+                // POP - извлечение значения из стека.
+                case POP:
+                {
+                    OperatedState.Registers[R1] = OperatedState.getWord(OperatedState.Registers[14]) + Imm20;
+                    ++OperatedState.Registers[14];
+                    break;
+                }
+
+                // ФУНКЦИИ.
+                // CALL - вызвать функцию по адресу из регистра.
+                case CALL:
+                {
+                    // Запоминаем адрес следубщей команды.
+                    --OperatedState.Registers[14];
+                    OperatedState.setWord(OperatedState.Registers[15] + 1, OperatedState.Registers[14]);
+
+                    // Передаём управление.
+                    OperatedState.Registers[15] = OperatedState.Registers[R1] + Imm20 - 1; // "-1" - костыль, связанный с тем, что после выполнения любой команды (даже CALL) R15 увеличивается на 1.
+                    break;
+                }
+
+                // CALL - вызвать функцию по адресу из непосредственного операнда.
+                case CALLI:
+                {
+                    // Запоминаем адрес следубщей команды.
+                    --OperatedState.Registers[14];
+                    OperatedState.setWord(OperatedState.Registers[15] + 1, OperatedState.Registers[14]);
+
+                    // Передаём управление.
+                    OperatedState.Registers[15] = Imm20 - 1;
+                    break;
+                }
+
+                // RET - возврат из функции.
+                case RET:
+                {
+                    // Получаем адрес возврата.
+                    OperatedState.Registers[15] = OperatedState.getWord(OperatedState.Registers[14]) - 1;
+                    ++OperatedState.Registers[14];
+
+                    // Убираем из стека аргументы функции.
+                    OperatedState.Registers[14] += Imm20;
+                    break;
+                }
+
+                // ПЕРЕХОДЫ.
                 // JMP - безусловный переход.
                 case JMP:
                 {
                     OperatedState.Registers[15] = Imm20 - 1; // "-1" - костыль, связанный с тем, что после выполнения любой команды (даже JMP) R15 увеличивается на 1.
+                    break;
+                }
+
+                // РАБОТА С ПАМЯТЬЮ.
+                // LOAD - загрузка значения из памяти по указанному непосредственно адресу в регистр.
+                case LOAD:
+                {
+                    OperatedState.Registers[R1] = OperatedState.getWord(Imm20);
+                    break;
+                }
+
+                // LOADR - загрузка значения из памяти по указанному во втором регистре адресу в первый регистр.
+                case LOADR:
+                {
+                    OperatedState.Registers[R1] = OperatedState.getWord(OperatedState.Registers[R2] + Imm16);
                     break;
                 }
 
@@ -333,6 +494,7 @@ namespace FUPM2EMU
         {
             {"halt",    HALT,    RI},
             {"syscall", SYSCALL, RI},
+
             {"add",     ADD,     RR},
             {"addi",    ADDI,    RI},
             {"sub",     SUB,     RR},
@@ -341,9 +503,34 @@ namespace FUPM2EMU
             {"muli",    MULI,    RI},
             {"div",     DIV,     RR},
             {"divi",    DIVI,    RI},
-            {"lc",      LC,      RI},
 
-            {"jmp",     JMP,     J }
+            {"lc",      LC,      RI},
+            {"mov",     MOV,     RR},
+
+            {"shl",     SHL,     RR},
+            {"shli",    SHLI,    RI},
+            {"shr",     SHR,     RR},
+            {"shri",    SHRI,    RI},
+
+            {"and",     AND,     RR},
+            {"andi",    ANDI,    RI},
+            {"or",      OR,      RR},
+            {"ori",     ORI,     RI},
+            {"xor",     XOR,     RR},
+            {"xori",    XORI,    RI},
+            {"not",     NOT,     RI},
+
+            {"push",    PUSH,    RI},
+            {"pop",     POP,     RI},
+
+            {"call",    CALL,    RM},
+            {"calli",   CALLI,   J },
+            {"ret",     RET,     RI},
+
+            {"jmp",     JMP,     J },
+
+            {"load",    LOAD,    RM},
+            {"loadr",   LOADR,   RR}
         };
 
         // Заполнение отображений.
@@ -407,6 +594,10 @@ namespace FUPM2EMU
                         if (!(FileStream >> Input)) { break; } // Проверка на успешность чтения.
                         if (!Input.size()) { break; }          // Проверка строки на пустоту.
 
+                        #ifdef ASSEMBLING_DEBUG_OUTPUT
+                        std::cout << "Command/mark:" << Input << std::endl;
+                        #endif
+
                         // Начинается на ";" - входим в состояние "в комментарии" (до новой строки).
                         if (Input[0] == ';')
                         {
@@ -458,7 +649,7 @@ namespace FUPM2EMU
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
                                 {
                                     // Перевод ввода в число и запись в конец слова.
-                                    Word |= (std::stoi(Input) & 0xFFFFFF); // 24 бита на длинный Imm24.
+                                    Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
                                 }
                                 break;
                             }
@@ -479,23 +670,52 @@ namespace FUPM2EMU
                                 // Непосредственный операнд.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
                                 // Перевод ввода в число и запись в конец слова.
-                                Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на короткий Imm20.
+                                Word |= (std::stoi(Input) & 0xFFFF); // 16 бит на короткий Imm16.
                                 break;
                             }
 
                             // Регистр и адрес.
                             case RM:
                             {
+                                // Регистр.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+
+                                // Непосредственный операнд - адрес.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
+
+                                // Проверка, число ли это.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    // Число. Тогда сразу подставляем адрес.
+                                    Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
+                                }
+                                else
+                                {
+                                    // Метка. Запоминаем адрес команды для последующей подстановки адреса метки.
+                                    UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input));
+                                }
                                 break;
                             }
 
                             // Адрес.
                             case J:
                             {
-                                // Непосредственный операнд - метка.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSMARK)); }
-                                // Запоминаем адрес команды для последующей подстановки адреса метки.
-                                UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input));
+                                // Непосредственный операнд - адрес.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
+
+                                // Проверка, число ли это.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    // Число. Тогда сразу подставляем адрес.
+                                    Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
+                                }
+                                else
+                                {
+                                    // Метка. Запоминаем адрес команды для последующей подстановки адреса метки.
+                                    UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input));
+                                }
                                 break;
                             }
                         }
@@ -552,6 +772,11 @@ namespace FUPM2EMU
                     std::cerr << "Immediate argument was not specified." << std::endl;
                     break;
                 }
+                case AssemblingException::Code::ARGSADDR:
+                {
+                    std::cerr << "Address was expected but was not specified." << std::endl;
+                    break;
+                }
                 case AssemblingException::Code::ARGSMARK:
                 {
                     std::cerr << "Mark argument was not specified." << std::endl;
@@ -567,6 +792,7 @@ namespace FUPM2EMU
             throw(Exception::ASSEMBLING);
         }
 
+        OperatedState.Registers[14] = MemorySize - 1; // Размещение стека в конце памяти.
         return(0);
     }
 
@@ -627,7 +853,7 @@ namespace FUPM2EMU
             }
 
             #ifdef EXECUTION_DEBUG_OUTPUT
-            std::cout << "ReturnCode: " << ReturnCode << std::endl;
+            std::cout << "ReturnCode: " << int(ReturnCode) << std::endl;
             #endif
         }
         return(0);
