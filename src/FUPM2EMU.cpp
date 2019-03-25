@@ -7,6 +7,7 @@
 //#define EXECUTION_DEBUG_OUTPUT
 //#define LOADINGSTATE_DEBUG_OUTPUT
 //#define ASSEMBLING_DEBUG_OUTPUT
+//#define EXECUTION_DEBUG_STEPS
 
 namespace FUPM2EMU
 {
@@ -29,6 +30,10 @@ namespace FUPM2EMU
 
 
     /////////////////  STATE  ////////////////
+    // Настройки компиляции:
+    #define MEMORY_MOD          // Модульная адресация.
+    //#define MEMORY_EXCEPTIONS // Исключение при выходе за пределы адресного пространства.
+
     State::State()
     {
         // Заполнение нулями регистров.
@@ -82,12 +87,33 @@ namespace FUPM2EMU
         return(0);
     }
 
+
     uint32_t State::getWord(size_t Address)
     {
+        // Адресация по модулю.
+        #ifdef MEMORY_MOD
+        Address %= MemorySize;
+        #endif
+
+        // Исключение при выходе за пределы адресного пространства.
+        #ifdef MEMORY_EXCEPTIONS
+        if (Address > MemorySize) { throw(Exception::MEMORY); }
+        #endif
+
         return(ReadWord(&(Memory[Address * BytesInWord])));
     }
     void State::setWord(uint32_t Value, size_t Address)
     {
+        // Адресация по модулю.
+        #ifdef MEMORY_MOD
+        Address %= MemorySize;
+        #endif
+
+        // Исключение при выходе за пределы адресного пространства.
+        #ifdef MEMORY_EXCEPTIONS
+        if (Address > MemorySize) { throw(Exception::MEMORY); }
+        #endif
+
         WriteWord(Value, &(Memory[Address * BytesInWord]));
     }
 
@@ -131,6 +157,7 @@ namespace FUPM2EMU
         {
             switch(Operation)
             {
+                // СИСТЕМНОЕ.
                 // HALT - выключение процессора.
                 case HALT:
                 {
@@ -155,16 +182,42 @@ namespace FUPM2EMU
                             std::cin >> OperatedState.Registers[R1];
                             break;
                         }
+                        // SCANDOUBLE - запрос вещественного числа.
+                        case 101:
+                        {
+                            // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                            if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                            double Input = 0.0;
+                            std::cin >> Input;
+                            *(double*)(OperatedState.Registers + R1) = Input;
+                            break;
+                        }
                         // PRINTINT - вывод целого числа.
                         case 102:
                         {
                             std::cout << OperatedState.Registers[R1];
                             break;
                         }
+                        // PRINTDOUBLE - вывод вещественного числа.
+                        case 103:
+                        {
+                            // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                            if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                            std::cout << *(double*)(OperatedState.Registers + R1);
+                            break;
+                        }
                         // PUTCHAR - вывод символа.
                         case 105:
                         {
                             putchar(uint8_t(OperatedState.Registers[R1]));
+                            break;
+                        }
+                        // GETCHAR - получение символа.
+                        case 106:
+                        {
+                            OperatedState.Registers[R1] = int32_t(getchar());
                             break;
                         }
                         // Использован неспецифицированный код системного вызова.
@@ -177,7 +230,7 @@ namespace FUPM2EMU
                     break;
                 }
 
-                // ЦЕЛОЧИСЛЕННЫЕ ОПЕРАЦИИ.
+                // ЦЕЛОЧИСЛЕННАЯ АРИФМЕТИКА.
                 // ADD - сложение регистров.
                 case ADD:
                 {
@@ -210,11 +263,11 @@ namespace FUPM2EMU
                 case MUL:
                 {
                     // Результат умножения приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
 
                     int64_t Product = int64_t(OperatedState.Registers[R1]) * int64_t(OperatedState.Registers[R2] + Imm16);
                     OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState.Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
+                    OperatedState.Registers[R1 + 1] = int32_t((Product >> State::BitsInWord) & 0xFFFFFFFF);
                     break;
                 }
 
@@ -222,11 +275,11 @@ namespace FUPM2EMU
                 case MULI:
                 {
                     // Результат умножения приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
 
                     int64_t Product = int64_t(OperatedState.Registers[R1]) * int64_t(Imm20);
                     OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState.Registers[R1 + 1] = int32_t((Product >> BitsInWord) & 0xFFFFFFFF);
+                    OperatedState.Registers[R1 + 1] = int32_t((Product >> State::BitsInWord) & 0xFFFFFFFF);
                     break;
                 }
 
@@ -234,11 +287,11 @@ namespace FUPM2EMU
                 case DIV:
                 {
                     // Результат деления приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
                     // Происходит деление на ноль.
                     if (!OperatedState.Registers[R2]) { throw(OperationException::DIVBYZERO); }
 
-                    int64_t Divident = int64_t(OperatedState.Registers[R1] | (int64_t(OperatedState.Registers[R1 + 1]) << BitsInWord));
+                    int64_t Divident = int64_t(OperatedState.Registers[R1] | (int64_t(OperatedState.Registers[R1 + 1]) << State::BitsInWord));
                     int64_t Divider = int64_t(OperatedState.Registers[R2]);
                     int64_t Product = Divident / Divider;
 
@@ -257,11 +310,11 @@ namespace FUPM2EMU
                 case DIVI:
                 {
                     // Результат деления приведёт к выходу за пределы существующих регистров.
-                    if (R1 + 1 >= RegistersNumber) { throw(OperationException::INVALIDREG); }
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
                     // Происходит деление на ноль.
                     if (!Imm20) { throw(OperationException::DIVBYZERO); }
 
-                    int64_t Divident = int64_t(OperatedState.Registers[R1] | (int64_t(OperatedState.Registers[R1 + 1]) << BitsInWord));
+                    int64_t Divident = int64_t(OperatedState.Registers[R1] | (int64_t(OperatedState.Registers[R1 + 1]) << State::BitsInWord));
                     int64_t Divider = int64_t(Imm20);
                     int64_t Product = Divident / Divider;
 
@@ -370,6 +423,100 @@ namespace FUPM2EMU
                     break;
                 }
 
+                // ВЕЩЕСТВЕННАЯ АРИФМЕТИКА.
+                // ADDD - сложение двух вещественных чисел.
+                case ADDD:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if ((R1 + 1 >= State::RegistersNumber) || (R2 + 1 >= State::RegistersNumber)) { throw(OperationException::INVALIDREG); }
+
+                    *(double*)(OperatedState.Registers + R1) += *(double*)(OperatedState.Registers + R2);
+                    break;
+                }
+
+                // SUBD - разность двух вещественных чисел.
+                case SUBD:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if ((R1 + 1 >= State::RegistersNumber) || (R2 + 1 >= State::RegistersNumber)) { throw(OperationException::INVALIDREG); }
+
+                    *(double*)(OperatedState.Registers + R1) -= *(double*)(OperatedState.Registers + R2);
+                    break;
+                }
+
+                // MULD - произведение двух вещественных чисел.
+                case MULD:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if ((R1 + 1 >= State::RegistersNumber) || (R2 + 1 >= State::RegistersNumber)) { throw(OperationException::INVALIDREG); }
+
+                    *(double*)(OperatedState.Registers + R1) *= *(double*)(OperatedState.Registers + R2);
+                    break;
+                }
+
+                // DIVD - частное от деления двух вещественных чисел.
+                case DIVD:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if ((R1 + 1 >= State::RegistersNumber) || (R2 + 1 >= State::RegistersNumber)) { throw(OperationException::INVALIDREG); }
+
+                    *(double*)(OperatedState.Registers + R1) /= *(double*)(OperatedState.Registers + R2);
+                    break;
+                }
+
+                // ITOD - преобразование целого числа в вещественное.
+                case ITOD:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                    *(double*)(OperatedState.Registers + R1) = (double)(OperatedState.Registers[R2]);
+                    break;
+                }
+
+                // DTOI - преобразование целого числа в вещественное.
+                case DTOI:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if (R2 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                    // Требуется вызвать исключение, если значение вещественного числа не помещается в регистр.
+                    if ( (*(double*)(OperatedState.Registers + R2) > (double)(int32_t(0x7FFFFFFF))) ||
+                         (*(double*)(OperatedState.Registers + R2) < (double)(int32_t(0xFFFFFFFF))) )
+                    { throw(OperationException::REGOVERFLOW); }
+
+                    OperatedState.Registers[R1] = int32_t(*(double*)(OperatedState.Registers + R2));
+                    break;
+                }
+
+                // СРАВНЕНИЕ.
+                // CMP - сравнение двух регистров.
+                case CMP:
+                {
+                    // Сброс флагов.
+                    OperatedState.Flags &= ~(State::FlagsBits::EQUALITY);
+                    OperatedState.Flags &= ~(State::FlagsBits::MAJORITY);
+                    // Судя по дизассемблеру, эти две строки при текущем выборе положения бит соптимизируется в эту: OperatedState.Flags &= ~(0b11);
+
+                    // Установка флагов.
+                    OperatedState.Flags |= (OperatedState.Registers[R1] == OperatedState.Registers[R2]) << State::FlagsBits::EQUALITY_POS;
+                    OperatedState.Flags |= (OperatedState.Registers[R1] <  OperatedState.Registers[R2]) << State::FlagsBits::MAJORITY_POS;
+                    break;
+                }
+
+                // CMPI - сравнение регистра и константы.
+                case CMPI:
+                {
+                    // Сброс флагов.
+                    OperatedState.Flags &= ~(State::FlagsBits::EQUALITY);
+                    OperatedState.Flags &= ~(State::FlagsBits::MAJORITY);
+
+                    // Установка флагов.
+                    OperatedState.Flags |= (OperatedState.Registers[R1] == Imm20) << State::FlagsBits::EQUALITY_POS;
+                    OperatedState.Flags |= (OperatedState.Registers[R1] <  Imm20) << State::FlagsBits::MAJORITY_POS;
+                    break;
+                }
+
                 // СТЕК.
                 // PUSH - помещение значения регистра в стек.
                 case PUSH:
@@ -432,6 +579,48 @@ namespace FUPM2EMU
                     break;
                 }
 
+                // JNE - переход при флаге неравенства (!=).
+                case JNE:
+                {
+                    if (!(OperatedState.Flags & State::FlagsBits::EQUALITY)) { OperatedState.Registers[15] = Imm20 - 1; }
+                    break;
+                }
+
+                // JEQ - переход при флаге равенства (==).
+                case JEQ:
+                {
+                    if (OperatedState.Flags & State::FlagsBits::EQUALITY) { OperatedState.Registers[15] = Imm20 - 1; }
+                    break;
+                }
+
+                // JLE - переход при флаге "левый операнд меньше либо равен правому" (<=).
+                case JLE:
+                {
+                    if ((OperatedState.Flags & State::FlagsBits::MAJORITY) || (OperatedState.Flags & State::FlagsBits::EQUALITY)) { OperatedState.Registers[15] = Imm20 - 1; }
+                    break;
+                }
+
+                // JL - переход при флаге "левый операнд меньше правого" (<).
+                case JL:
+                {
+                    if ((OperatedState.Flags & State::FlagsBits::MAJORITY) && !(OperatedState.Flags & State::FlagsBits::MAJORITY)){ OperatedState.Registers[15] = Imm20 - 1; }
+                    break;
+                }
+
+                // JGE - переход при флаге "левый операнд больше либо равен правому" (>=).
+                case JGE:
+                {
+                    if (!(OperatedState.Flags & State::FlagsBits::MAJORITY) || (OperatedState.Flags & State::FlagsBits::EQUALITY)) { OperatedState.Registers[15] = Imm20 - 1; }
+                    break;
+                }
+
+                // JG - переход при флаге "левый операнд больше правого" (>).
+                case JG:
+                {
+                    if (!(OperatedState.Flags & State::FlagsBits::MAJORITY) && !(OperatedState.Flags & State::FlagsBits::EQUALITY)) { OperatedState.Registers[15] = Imm20 - 1; }
+                    break;
+                }
+
                 // РАБОТА С ПАМЯТЬЮ.
                 // LOAD - загрузка значения из памяти по указанному непосредственно адресу в регистр.
                 case LOAD:
@@ -440,10 +629,78 @@ namespace FUPM2EMU
                     break;
                 }
 
+                // STORE - выгрузка значения из регистра в память по указанному непосредственно адресу.
+                case STORE:
+                {
+                    OperatedState.setWord(OperatedState.Registers[R1], Imm20);
+                    break;
+                }
+
+                // LOAD2 - загрузка значения из памяти по указанному непосредственно адресу в пару регистров.
+                case LOAD2:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                    OperatedState.Registers[R1] = OperatedState.getWord(Imm20);
+                    OperatedState.Registers[R1 + 1] = OperatedState.getWord(Imm20 + 1);
+                    break;
+                }
+
+                // STORE2 - выгрузка значения из пары регистров в память по указанному непосредственно адресу.
+                case STORE2:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                    OperatedState.setWord(OperatedState.Registers[R1], Imm20);
+                    OperatedState.setWord(OperatedState.Registers[R1 + 1], Imm20 + 1);
+                    break;
+                }
+
                 // LOADR - загрузка значения из памяти по указанному во втором регистре адресу в первый регистр.
                 case LOADR:
                 {
-                    OperatedState.Registers[R1] = OperatedState.getWord(OperatedState.Registers[R2] + Imm16);
+                    try { OperatedState.Registers[R1] = OperatedState.getWord(OperatedState.Registers[R2] + Imm16); }
+                    catch(State::Exception Exception) { throw(OperationException::INVALIDMEM); }
+                    break;
+                }
+
+                // STORER - выгрузка значения из регистра в память по указанному во втором регистре адресу.
+                case STORER:
+                {
+                    try { OperatedState.setWord(OperatedState.Registers[R1], OperatedState.Registers[R2] + Imm16); }
+                    catch(State::Exception Exception) { throw(OperationException::INVALIDMEM); }
+                    break;
+                }
+
+                // LOADR2 - загрузка значения из памяти по указанному во втором регистре адресу в пару регистров.
+                case LOADR2:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                    try
+                    {
+                        OperatedState.Registers[R1] = OperatedState.getWord(OperatedState.Registers[R2] + Imm16);
+                        OperatedState.Registers[R1 + 1] = OperatedState.getWord(OperatedState.Registers[R2] + Imm16 + 1);
+                    }
+                    catch(State::Exception Exception) { throw(OperationException::INVALIDMEM); }
+                    break;
+                }
+
+                // STORER2 - выгрузка значения из пары регистров в память по указанному во втором регистре адресу.
+                case STORER2:
+                {
+                    // Результат выполнения команды приведёт к выходу за пределы существующих регистров.
+                    if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
+
+                    try
+                    {
+                        OperatedState.setWord(OperatedState.Registers[R1], OperatedState.Registers[R2] + Imm16);
+                        OperatedState.setWord(OperatedState.Registers[R1 + 1], OperatedState.Registers[R2] + Imm16 + 1);
+                    }
+                    catch(State::Exception Exception) { throw(OperationException::INVALIDMEM); }
                     break;
                 }
 
@@ -465,13 +722,24 @@ namespace FUPM2EMU
                     throw(Exception::INVALIDSTATE);
                     break;
                 }
+                case OperationException::INVALIDMEM:
+                {
+                    std::cerr << "[EXECUTION ERROR]: access to an invalid address." << std::endl;
+                    throw(Exception::INVALIDSTATE);
+                    break;
+                }
                 case OperationException::DIVBYZERO:
                 {
                     std::cerr << "[EXECUTION ERROR]: division by zero." << std::endl;
                     throw(Exception::MACHINE);
                     break;
                 }
-                default: { break; }
+                case OperationException::REGOVERFLOW:
+                {
+                    std::cerr << "[EXECUTION ERROR]: register overflow." << std::endl;
+                    throw(Exception::MACHINE);
+                    break;
+                }
             }
         }
 
@@ -492,9 +760,11 @@ namespace FUPM2EMU
         // Таблица, связывающая имя операции, её код и тип.
         std::vector<std::tuple<std::string, int, int>> TranslationTable =
         {
+            // Системное.
             {"halt",    HALT,    RI},
             {"syscall", SYSCALL, RI},
 
+            // Целочисленная арифметика.
             {"add",     ADD,     RR},
             {"addi",    ADDI,    RI},
             {"sub",     SUB,     RR},
@@ -504,14 +774,17 @@ namespace FUPM2EMU
             {"div",     DIV,     RR},
             {"divi",    DIVI,    RI},
 
+            // Копирование в регистры.
             {"lc",      LC,      RI},
             {"mov",     MOV,     RR},
 
+            // Сдвиги.
             {"shl",     SHL,     RR},
             {"shli",    SHLI,    RI},
             {"shr",     SHR,     RR},
             {"shri",    SHRI,    RI},
 
+            // Логические операции.
             {"and",     AND,     RR},
             {"andi",    ANDI,    RI},
             {"or",      OR,      RR},
@@ -520,17 +793,45 @@ namespace FUPM2EMU
             {"xori",    XORI,    RI},
             {"not",     NOT,     RI},
 
+            // Вещественная арифметика.
+            {"addd",    ADDD,    RR},
+            {"subd",    SUBD,    RR},
+            {"muld",    MULD,    RR},
+            {"divd",    DIVD,    RR},
+            {"itod",    ITOD,    RR},
+            {"dtoi",    DTOI,    RR},
+
+            // Стек.
             {"push",    PUSH,    RI},
             {"pop",     POP,     RI},
 
+            // Функции
             {"call",    CALL,    RM},
-            {"calli",   CALLI,   J },
-            {"ret",     RET,     RI},
+            {"calli",   CALLI,   Me},
+            {"ret",     RET,     Im},
 
-            {"jmp",     JMP,     J },
+            // Сравнение.
+            {"cmp",     CMP,     RR},
+            {"cmpi",    CMPI,    RI},
 
+            // Переходы.
+            {"jmp",     JMP,     Me},
+            {"jne",     JNE,     Me},
+            {"jeq",     JEQ,     Me},
+            {"jle",     JLE,     Me},
+            {"jl",      JL,      Me},
+            {"jge",     JGE,     Me},
+            {"jg",      JG,      Me},
+
+            // Работа с памятью.
             {"load",    LOAD,    RM},
-            {"loadr",   LOADR,   RR}
+            {"store",   STORE,   RM},
+            {"load2",   LOAD2,   RM},
+            {"store2",  STORE2,  RM},
+            {"loadr",   LOADR,   RR},
+            {"storer",  STORER,  RR},
+            {"loadr2",  LOADR2,  RR},
+            {"storer2", STORER2, RR}
         };
 
         // Заполнение отображений.
@@ -613,6 +914,13 @@ namespace FUPM2EMU
                             break;
                         }
 
+                        // Если встретилась директива "word", просто оставляем слово по текущему адресу свободным.
+                        if (Input == "word")
+                        {
+                            ++WriteAddress;
+                            break;
+                        }
+
                         // Если встретилась директива "end", запоминаем метку старта программы. Так как эта директива обязана быть в конце программы,
                         // к моменту её чтения метка уже точно должна существовать. Тогда можно сразу проинициализировать нужным значением регистр R15.
                         if (Input == "end")
@@ -625,10 +933,10 @@ namespace FUPM2EMU
 
 
                         // К этому моменту уже точно известно, что считанное слово должно быть именем операции. Тогда начинаем разбирать её и её аргументы.
-                        uint32_t Word = 0; // Создаём переменную для записываемого слова команды.
+                        uint32_t Command = 0; // Создаём переменную для записываемого слова команды.
 
                         // Парсим операцию.
-                        try {Word |= OpCode.at(Input) << (BitsInWord - OpCodeBits); }
+                        try {Command |= OpCode.at(Input) << (BitsInCommand - BitsInOpCode); }
                         catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::OPCODE)); }
 
                         // Парсим аргументы.
@@ -639,7 +947,7 @@ namespace FUPM2EMU
                             {
                                 // Регистр.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
-                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits); }
+                                try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
 
                                 // Непосредственный операнд.
@@ -649,7 +957,7 @@ namespace FUPM2EMU
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
                                 {
                                     // Перевод ввода в число и запись в конец слова.
-                                    Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
+                                    Command |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
                                 }
                                 break;
                             }
@@ -659,18 +967,18 @@ namespace FUPM2EMU
                             {
                                 // Первый регистр.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
-                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits); }
+                                try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
 
                                 // Второй регистр.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
-                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits - RegCodeBits); }
+                                try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
 
                                 // Непосредственный операнд.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
                                 // Перевод ввода в число и запись в конец слова.
-                                Word |= (std::stoi(Input) & 0xFFFF); // 16 бит на короткий Imm16.
+                                Command |= (std::stoi(Input) & 0xFFFF); // 16 бит на короткий Imm16.
                                 break;
                             }
 
@@ -679,49 +987,45 @@ namespace FUPM2EMU
                             {
                                 // Регистр.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
-                                try { Word |= RegCode.at(Input) << (BitsInWord - OpCodeBits - RegCodeBits); }
+                                try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
 
                                 // Непосредственный операнд - адрес.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
 
-                                // Проверка, число ли это.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos)
-                                {
-                                    // Число. Тогда сразу подставляем адрес.
-                                    Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
-                                }
-                                else
-                                {
-                                    // Метка. Запоминаем адрес команды для последующей подстановки адреса метки.
-                                    UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input));
-                                }
+                                // Проверка, число это, исли метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
                             }
 
                             // Адрес.
-                            case J:
+                            case Me:
                             {
                                 // Непосредственный операнд - адрес.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
 
-                                // Проверка, число ли это.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos)
-                                {
-                                    // Число. Тогда сразу подставляем адрес.
-                                    Word |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
-                                }
-                                else
-                                {
-                                    // Метка. Запоминаем адрес команды для последующей подстановки адреса метки.
-                                    UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input));
-                                }
+                                // Проверка, число это, исли метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
+                                break;
+                            }
+
+                            // Непосредственный операнд.
+                            case Im:
+                            {
+                                // Непосредственный операнд - число.
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+
+                                // Проверка, число ли это. Если нет, бросаем исключение.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                else { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
                                 break;
                             }
                         }
 
                         // Запись слова.
-                        OperatedState.setWord(Word, WriteAddress);
+                        OperatedState.setWord(Command, WriteAddress);
                         ++WriteAddress;
                         break;
                     }
@@ -792,7 +1096,7 @@ namespace FUPM2EMU
             throw(Exception::ASSEMBLING);
         }
 
-        OperatedState.Registers[14] = MemorySize - 1; // Размещение стека в конце памяти.
+        OperatedState.Registers[14] = State::MemorySize - 1; // Размещение стека в конце памяти.
         return(0);
     }
 
@@ -830,6 +1134,10 @@ namespace FUPM2EMU
             try
             {
                 ReturnCode = executor.step(state);
+
+                #ifdef EXECUTION_DEBUG_STEPS
+                getchar();
+                #endif
             }
             catch (Executor::Exception Exception)
             {

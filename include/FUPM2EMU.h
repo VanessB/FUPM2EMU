@@ -70,25 +70,14 @@ namespace FUPM2EMU
     // Типы операций.
     enum OPERATION_TYPE
     {
-        RI = 0,
-        RR = 1,
-        RM = 2,
-        J  = 3
+        RI = 0, // Регистр - непосредственный операнд.
+        RR = 1, // Регистр - регистр.
+        RM = 2, // Регистр - адрес.
+        Me = 3, // Адрес.
+        Im = 4, // Непосредственный операнд.
     };
 
     ////////////////
-
-    // Константы.
-    const unsigned char BitsInWord = 32;        // Число бит в машинном слове.
-    const unsigned char BytesInWord = 4;        // Число байт в машинном слове.
-
-    const unsigned char OpCodeBits = 8;         // Число бит на код операции.
-    const unsigned char RegCodeBits = 4;        // Число бит на код регистра.
-    const unsigned char AddressBits = 20;       // Число бит в адресах.
-
-    const unsigned char RegistersNumber = 16;   // Количество регистров.
-    const unsigned int InstructionsNumber = 72; // Количество инструкций.
-    const size_t MemorySize = 1 << AddressBits; // Размер адресуемой памяти.
 
     // Вспомогательные функции.
     inline uint32_t ReadWord(uint8_t *Address);              // Конвертация четырёх uint8_t в uint32_t по указаному адресу.
@@ -100,10 +89,42 @@ namespace FUPM2EMU
     class State
     {
     public:
+        // Константы.
+        static const uint8_t BytesInWord = 4;                // Число байт в машинном слове.
+        static const uint8_t BitsInWord  = BytesInWord * 8;  // Число бит в машинном слове.
+        static const uint8_t AddressBits = 20;               // Число бит в адресах.
+        static const size_t  MemorySize  = 1 << AddressBits; // Размер адресуемой памяти (в словах).
+        static const uint8_t RegistersNumber = 16;           // Количество регистров.
+
+        // Коды исключений.
+        enum class Exception
+        {
+            OK,     // OK.
+            MEMORY, // Выход за пределы адресуемой памяти.
+        };
+
+        // Биты регистра флагов.
+        struct FlagsBits // Невозможность использовать namespace внутри class крайне бесит.
+        {
+            enum Positions
+            {
+                EQUALITY_POS = 0, // Позиция бита равенства.
+                MAJORITY_POS = 1, // Позиция бита преобладания.
+            };
+
+            enum Masks
+            {
+                EQUALITY = 1 << EQUALITY_POS, // Бит равенства. 0 - не равны, 1 - равны.
+                MAJORITY = 1 << MAJORITY_POS, // Бит преобладания. 0 - левый операнд больше правого, 1 - меньше.
+            };
+        };
+
+        // Данные состояния.
         int32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
         uint8_t Flags;                      // Регистр флагов (битность не задана спецификацией).
         std::vector<uint8_t> Memory;        // Память эмулируемой машины.
 
+        // Методы.
         State();
         ~State();
 
@@ -129,20 +150,21 @@ namespace FUPM2EMU
         // Коды исключений исполнителя.
         enum class Exception
         {
-            OK           = 0, // OK.
-            MACHINE      = 1, // Исключение, сгенерированное эмулируемой машиной.
-            INVALIDSTATE = 2, // Исключение, вызванное невалидным состоянием эмулируемой машины.
+            OK,           // OK.
+            MACHINE,      // Исключение, сгенерированное эмулируемой машиной.
+            INVALIDSTATE, // Исключение, вызванное невалидным состоянием эмулируемой машины.
         };
 
         // Коды, возвращаемые исполнителем эмулятору.
         enum class ReturnCode
         {
-            OK        = 0, // Продолжение работы.
-            TERMINATE = 1, // Штатное завершение.
-            WARNING   = 2, // Не описанная в спецификации потенциально опасная работа.
-            ERROR     = 3, // Критическая ошибка.
+            OK,        // Продолжение работы.
+            TERMINATE, // Штатное завершение.
+            WARNING,   // Не описанная в спецификации потенциально опасная работа.
+            ERROR,     // Критическая ошибка.
         };
 
+        // Методы.
         Executor();
         ~Executor();
 
@@ -153,9 +175,11 @@ namespace FUPM2EMU
         // Коды испключений при выполнении операции.
         enum class OperationException
         {
-            OK         = 0, // OK.
-            INVALIDREG = 1, // Доступ к несуществующим регистрам.
-            DIVBYZERO  = 2, // Деление на ноль.
+            OK,          // OK.
+            INVALIDREG,  // Доступ к несуществующим регистрам.
+            INVALIDMEM,  // Выход за пределы доступной памяти.
+            DIVBYZERO,   // Деление на ноль.
+            REGOVERFLOW, // Переполнение регистра.
         };
 
     private:
@@ -168,12 +192,19 @@ namespace FUPM2EMU
     class Translator
     {
     public:
+        // Константы.
+        static const uint8_t BitsInCommand = State::BitsInWord; // Число битов на команду (в нашем случае команда - одно слово).
+        static const uint8_t BitsInOpCode  = 8; // Число бит на код операции.
+        static const uint8_t BitsInRegCode = 4; // Число бит на код регистра.
+
+        // Коды исключений.
         enum class Exception
         {
-            OK         = 0, // OK.
-            ASSEMBLING = 1, // Ошибка при ассемблировании.
+            OK,         // OK.
+            ASSEMBLING, // Ошибка при ассемблировании.
         };
 
+        // Методы.
         Translator();
         ~Translator();
 
@@ -181,7 +212,7 @@ namespace FUPM2EMU
         int Disassemble(State &OperatedState, std::fstream &FileSTream); // Дизассемблирование состояния в файл.
 
     protected:
-        //std::vector<std::tuple<std::string, int, int>> TranslationTable; // Таблица, связывающая имя операции, её код и тип.
+        // Данные для трансляции.
         std::map<std::string, int> OpCode;  // Отображение из имени операции в её код.
         std::map<std::string, int> OpType;  // Отображение из имени операции в её тип.
         std::map<std::string, int> RegCode; // Отображение из имени регистра в его код.
@@ -192,14 +223,14 @@ namespace FUPM2EMU
             // Коды исключений
             enum class Code
             {
-                OK       = 0, // OK.
-                OPCODE   = 1, // Несуществующий код операции.
-                REGCODE  = 2, // Несуществующий код регистра.
-                ARGSREG  = 3, // Ожидалось имя регистра.
-                ARGSIMM  = 4, // Ожидался численный непосредственный операнд.
-                ARGSADDR = 5, // Ожидался адрес.
-                ARGSMARK = 6, // Ожидалось имя метки.
-                MARK     = 7, // Несуществующее имя метки.
+                OK,       // OK.
+                OPCODE,   // Несуществующий код операции.
+                REGCODE,  // Несуществующий код регистра.
+                ARGSREG,  // Ожидалось имя регистра.
+                ARGSIMM,  // Ожидался численный непосредственный операнд.
+                ARGSADDR, // Ожидался адрес.
+                ARGSMARK, // Ожидалось имя метки.
+                MARK,     // Несуществующее имя метки.
             };
 
             size_t address; // Адресс срабатывания (адресс записанной операции).
@@ -219,17 +250,16 @@ namespace FUPM2EMU
     class Emulator
     {
     public:
+        // Данные.
         State state;           // Текущее состояние машины.
         Executor executor;     // Исполнитель команд.
         Translator translator; // Ассемблер и дисассемблер.
 
+        // Методы.
         Emulator();
         ~Emulator();
 
         int Run(); // Выполнить текущее состояние.
-
-        //int LoadState(std::fstream &FileStream);     // Загрузка состояния из потока файла.
-        //int AssembleState(std::fstream &FileStream); // Перевести код на языке assembler в готовое к выполнению состояние и сделать это состояние текущим.
 
     protected:
 
