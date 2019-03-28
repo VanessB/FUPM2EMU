@@ -88,7 +88,7 @@ namespace FUPM2EMU
     }
 
 
-    uint32_t State::getWord(size_t Address)
+    inline uint32_t State::getWord(size_t Address)
     {
         // Адресация по модулю.
         #ifdef MEMORY_MOD
@@ -102,7 +102,7 @@ namespace FUPM2EMU
 
         return(ReadWord(&(Memory[Address * BytesInWord])));
     }
-    void State::setWord(uint32_t Value, size_t Address)
+    inline void State::setWord(uint32_t Value, size_t Address)
     {
         // Адресация по модулю.
         #ifdef MEMORY_MOD
@@ -136,7 +136,7 @@ namespace FUPM2EMU
         // Извлечение следующией команды.
         uint32_t Command = OperatedState.getWord(OperatedState.Registers[15]);
 
-        // Быстрее вычислить все возможные операнды сразу, чем использовать if else.
+        // Код будет короче, если вычислить все возможные операнды сразуx.
         OPERATION_CODE Operation = OPERATION_CODE((Command >> 24) & 0xFF);
         uint8_t R1 = (Command >> 20) & 0xF;
         uint8_t R2 = (Command >> 16) & 0xF;
@@ -153,8 +153,10 @@ namespace FUPM2EMU
         std::cout << "Immediates: " << "Imm16: " << Imm16 << " Imm20: " << Imm20 << std::endl;
         #endif
 
+        #ifndef NO_OPERATION_EXCEPTIONS
         try
         {
+        #endif
             switch(Operation)
             {
                 // СИСТЕМНОЕ.
@@ -296,7 +298,6 @@ namespace FUPM2EMU
                     int64_t Product = Divident / Divider;
 
                     // Результат деления не помещается в регистр. По спецификации - деление на ноль.
-                    //std::cout << Product << std::endl;
                     if (Product > 0x00000000FFFFFFFF) { throw(OperationException::DIVBYZERO); }
 
                     int64_t Remainder = Divident % Divider;
@@ -319,7 +320,6 @@ namespace FUPM2EMU
                     int64_t Product = Divident / Divider;
 
                     // Результат деления не помещается в регистр. По спецификации - деление на ноль.
-                    //std::cout << Product << std::endl;
                     if (Product > 0x00000000FFFFFFFF) { throw(OperationException::DIVBYZERO); }
 
                     int64_t Remainder = Divident % Divider;

@@ -1,26 +1,46 @@
 #include"../include/FUPM2EMU.h"
 #include<iostream>
+#include<iomanip>
 #include<string>
 #include<fstream>
+#include<chrono>
+
+// Глобальные константы для вывода информации.
+const std::string Version   = "0.9";
+const std::string TitleText = "FUPM2EMU version " + Version;
+const std::string HelpText  =
+R"(
+Arguments:
+  --help, -h                    Show help reference
+  --load, -l         <file>     Get machine's state from the file and run it.
+  --assemble, -a     <file>     Translate assembler code from the file and run the result
+  --benchmark, -b               Run the program with execution time beeing measured
+)";
 
 int main(int argc,  char *argv[])
 {
+    // Возможные состояния инициализации.
     enum class ArgsException
     {
-        OK         = 0, // Все нормально.
-        INCOMPARGS = 1, // Несовместимые аргументы.
-        NOFILEPATH = 2, // Не указан путь.
+        OK,          // Все нормально.
+        UNKNOWNARGS, // Неизвестные аргументы.
+        INCOMPARGS,  // Несовместимые аргументы.
+        NOFILEPATH,  // Не указан путь.
     };
 
     enum class FileMode
     {
-        DEFAULT  = 0, // Без загрузки файлов.
-        STATE    = 1, // Загрузка состояния памяти.
-        ASSEMBLE = 2, // Загрузка и трансляция исходного кода.
+        DEFAULT,  // Без загрузки файлов.
+        STATE,    // Загрузка состояния памяти.
+        ASSEMBLE, // Загрузка и трансляция исходного кода.
     };
 
+    // Измерение времени работы.
+    bool Benchmark = false;
+
+    // Робота с файлом.
     std::string FilePath;
-    FileMode InitMode = FileMode::DEFAULT;
+    FileMode initFileMode = FileMode::DEFAULT;
 
     try
     {
@@ -29,26 +49,46 @@ int main(int argc,  char *argv[])
         {
             Argument = argv[i];
 
-            // Загрузка состояния эмулятора из файла.
-            if ((Argument == "--load") || (Argument == "-l"))
+            // Справка о работе программы.
+            if ((Argument == "--help") || (Argument == "-h"))
             {
-                if (InitMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
+                if (i == 1) { std::cout << TitleText << std::endl <<  HelpText << std::endl; }
+                else { throw(ArgsException::INCOMPARGS); } // Справка вызывается первым аргументом.
+                return(0);
+            }
+
+            // Загрузка состояния эмулятора из файла.
+            else if ((Argument == "--load") || (Argument == "-l"))
+            {
+                if (initFileMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
                 if (i + 1 >= argc) { throw(ArgsException::NOFILEPATH); }
 
-                InitMode = FileMode::STATE;
+                initFileMode = FileMode::STATE;
                 FilePath = argv[i+1];
                 ++i;
             }
 
             // Ассемблирование исходного кода из файла в состояние эмулятора.
-            if ((Argument == "--assemble") || (Argument == "-a"))
+            else if ((Argument == "--assemble") || (Argument == "-a"))
             {
-                if (InitMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
+                if (initFileMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
                 if (i + 1 >= argc) { throw(ArgsException::NOFILEPATH); }
 
-                InitMode = FileMode::ASSEMBLE;
+                initFileMode = FileMode::ASSEMBLE;
                 FilePath = argv[i+1];
                 ++i;
+            }
+
+            // Измерение времени компиляции (если была) и работы эмулируемой программы.
+            else if ((Argument == "--benchmark") || (Argument == "-b"))
+            {
+                Benchmark = true;
+            }
+
+            // Неизвестные аргументы.
+            else
+            {
+                throw(ArgsException::UNKNOWNARGS);
             }
         }
     }
@@ -57,14 +97,19 @@ int main(int argc,  char *argv[])
         switch(Exception)
         {
             case ArgsException::OK: { break; }
+            case ArgsException::UNKNOWNARGS:
+            {
+                std::cerr << "[CLI ERROR]: unknown arguments. Try using --help." << std::endl;
+                break;
+            }
             case ArgsException::INCOMPARGS:
             {
-                std::cerr << "Error: incompatable arguments." << std::endl;
+                std::cerr << "[CLI ERROR]: incompatable arguments." << std::endl;
                 break;
             }
             case ArgsException::NOFILEPATH:
             {
-                std::cerr << "Error: file path has not been passed." << std::endl;
+                std::cerr << "[CLI ERROR]: file path has not been passed." << std::endl;
             }
         }
 
@@ -76,7 +121,7 @@ int main(int argc,  char *argv[])
 
     if (!FilePath.empty())
     {
-        switch(InitMode)
+        switch(initFileMode)
         {
             case FileMode::DEFAULT:
             {
@@ -94,7 +139,7 @@ int main(int argc,  char *argv[])
                 }
                 else
                 {
-                    std::cerr << "Failed to open file: " << FilePath << std::endl;
+                    std::cerr << "[CLI ERROR]: Failed to open file: " << FilePath << std::endl;
                 }
                 break;
             }
@@ -105,12 +150,25 @@ int main(int argc,  char *argv[])
                 FileStream.open(FilePath, std::fstream::in);
                 if (FileStream.is_open())
                 {
-                    FUPM2.translator.Assemble(FileStream, FUPM2.state);
+                    if (Benchmark)
+                    {
+                        std::clock_t StartAssembling = std::clock();
+                        FUPM2.translator.Assemble(FileStream, FUPM2.state);
+                        std::clock_t EndAssembling = std::clock();
+                        std::cout << std::fixed << std::setprecision(2)
+                                  << "[BENCHMARK]: Assembling CPU time used: "
+                                  << 1000.0 * (EndAssembling - StartAssembling) / CLOCKS_PER_SEC << "ms" << std::endl
+                                  << std::defaultfloat;
+                    }
+                    else
+                    {
+                        FUPM2.translator.Assemble(FileStream, FUPM2.state);
+                    }
                     FileStream.close();
                 }
                 else
                 {
-                    std::cerr << "Failed to open file: " << FilePath << std::endl;
+                    std::cerr << "[CLI ERROR]: Failed to open file: " << FilePath << std::endl;
                 }
                 break;
             }
@@ -118,6 +176,19 @@ int main(int argc,  char *argv[])
     }
 
     // Запуск эмуляции.
-    FUPM2.Run();
+    if (Benchmark)
+    {
+        std::clock_t StartExecution = std::clock();
+        FUPM2.Run();
+        std::clock_t EndExecution = std::clock();
+        std::cout << std::fixed << std::setprecision(2)
+                  << "[BENCHMARK]: Execution CPU time used: "
+                  << 1000.0 * (EndExecution - StartExecution) / CLOCKS_PER_SEC << "ms" << std::endl
+                  << std::defaultfloat;
+    }
+    else
+    {
+        FUPM2.Run();
+    }
     return(0);
 }
