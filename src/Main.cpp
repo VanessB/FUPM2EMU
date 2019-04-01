@@ -99,17 +99,17 @@ int main(int argc,  char *argv[])
             case ArgsException::OK: { break; }
             case ArgsException::UNKNOWNARGS:
             {
-                std::cerr << "[CLI ERROR]: unknown arguments. Try using --help." << std::endl;
+                std::cerr << "Error: unknown arguments. Try using --help." << std::endl;
                 break;
             }
             case ArgsException::INCOMPARGS:
             {
-                std::cerr << "[CLI ERROR]: incompatable arguments." << std::endl;
+                std::cerr << "Error: incompatable arguments." << std::endl;
                 break;
             }
             case ArgsException::NOFILEPATH:
             {
-                std::cerr << "[CLI ERROR]: file path has not been passed." << std::endl;
+                std::cerr << "Error: file path has not been passed." << std::endl;
             }
         }
 
@@ -139,7 +139,7 @@ int main(int argc,  char *argv[])
                 }
                 else
                 {
-                    std::cerr << "[CLI ERROR]: Failed to open file: " << FilePath << std::endl;
+                    std::cerr << "Error: failed to open file: " << FilePath << std::endl;
                 }
                 break;
             }
@@ -168,7 +168,7 @@ int main(int argc,  char *argv[])
                 }
                 else
                 {
-                    std::cerr << "[CLI ERROR]: Failed to open file: " << FilePath << std::endl;
+                    std::cerr << "Error: failed to open file: " << FilePath << std::endl;
                 }
                 break;
             }

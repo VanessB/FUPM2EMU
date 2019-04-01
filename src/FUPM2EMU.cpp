@@ -153,10 +153,8 @@ namespace FUPM2EMU
         std::cout << "Immediates: " << "Imm16: " << Imm16 << " Imm20: " << Imm20 << std::endl;
         #endif
 
-        #ifndef NO_OPERATION_EXCEPTIONS
         try
         {
-        #endif
             switch(Operation)
             {
                 // СИСТЕМНОЕ.
@@ -268,8 +266,8 @@ namespace FUPM2EMU
                     if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
 
                     int64_t Product = int64_t(OperatedState.Registers[R1]) * int64_t(OperatedState.Registers[R2] + Imm16);
-                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState.Registers[R1 + 1] = int32_t((Product >> State::BitsInWord) & 0xFFFFFFFF);
+                    OperatedState.Registers[R1] = int32_t(Product & UINT32_MAX);
+                    OperatedState.Registers[R1 + 1] = int32_t((Product >> State::BitsInWord) & UINT32_MAX);
                     break;
                 }
 
@@ -280,8 +278,8 @@ namespace FUPM2EMU
                     if (R1 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
 
                     int64_t Product = int64_t(OperatedState.Registers[R1]) * int64_t(Imm20);
-                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState.Registers[R1 + 1] = int32_t((Product >> State::BitsInWord) & 0xFFFFFFFF);
+                    OperatedState.Registers[R1] = int32_t(Product & UINT32_MAX);
+                    OperatedState.Registers[R1 + 1] = int32_t((Product >> State::BitsInWord) & UINT32_MAX);
                     break;
                 }
 
@@ -298,12 +296,12 @@ namespace FUPM2EMU
                     int64_t Product = Divident / Divider;
 
                     // Результат деления не помещается в регистр. По спецификации - деление на ноль.
-                    if (Product > 0x00000000FFFFFFFF) { throw(OperationException::DIVBYZERO); }
+                    if (Product > UINT32_MAX) { throw(OperationException::DIVBYZERO); }
 
                     int64_t Remainder = Divident % Divider;
 
-                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState.Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
+                    OperatedState.Registers[R1] = int32_t(Product & UINT32_MAX);
+                    OperatedState.Registers[R1 + 1] = int32_t(Remainder & UINT32_MAX);
                     break;
                 }
 
@@ -320,12 +318,12 @@ namespace FUPM2EMU
                     int64_t Product = Divident / Divider;
 
                     // Результат деления не помещается в регистр. По спецификации - деление на ноль.
-                    if (Product > 0x00000000FFFFFFFF) { throw(OperationException::DIVBYZERO); }
+                    if (Product > UINT32_MAX) { throw(OperationException::DIVBYZERO); }
 
                     int64_t Remainder = Divident % Divider;
 
-                    OperatedState.Registers[R1] = int32_t(Product & 0xFFFFFFFF);
-                    OperatedState.Registers[R1 + 1] = int32_t(Remainder & 0xFFFFFFFF);
+                    OperatedState.Registers[R1] = int32_t(Product & UINT32_MAX);
+                    OperatedState.Registers[R1 + 1] = int32_t(Remainder & UINT32_MAX);
                     break;
                 }
 
@@ -481,8 +479,8 @@ namespace FUPM2EMU
                     if (R2 + 1 >= State::RegistersNumber) { throw(OperationException::INVALIDREG); }
 
                     // Требуется вызвать исключение, если значение вещественного числа не помещается в регистр.
-                    if ( (*(double*)(OperatedState.Registers + R2) > (double)(int32_t(0x7FFFFFFF))) ||
-                         (*(double*)(OperatedState.Registers + R2) < (double)(int32_t(0xFFFFFFFF))) )
+                    if ( (*(double*)(OperatedState.Registers + R2) > (double)(INT32_MAX)) ||
+                         (*(double*)(OperatedState.Registers + R2) < (double)(-INT32_MAX)) )
                     { throw(OperationException::REGOVERFLOW); }
 
                     OperatedState.Registers[R1] = int32_t(*(double*)(OperatedState.Registers + R2));
@@ -925,9 +923,9 @@ namespace FUPM2EMU
                         // к моменту её чтения метка уже точно должна существовать. Тогда можно сразу проинициализировать нужным значением регистр R15.
                         if (Input == "end")
                         {
-                            if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSMARK)); } // Чтение имени метки.
+                            if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::MARK_EXPECTED)); } // Чтение имени метки.
                             try { OperatedState.Registers[15] = MarksAddresses.at(Input); }
-                            catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::MARK)); }
+                            catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::UNDECLARED_MARK)); }
                             break;
                         }
 
@@ -937,7 +935,7 @@ namespace FUPM2EMU
 
                         // Парсим операцию.
                         try {Command |= OpCode.at(Input) << (BitsInCommand - BitsInOpCode); }
-                        catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::OPCODE)); }
+                        catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::OP_CODE)); }
 
                         // Парсим аргументы.
                         switch(OpType.at(Input))
@@ -946,15 +944,19 @@ namespace FUPM2EMU
                             case RI:
                             {
                                 // Регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
 
                                 // Проверка, число это, или метка. Если число, сразу подставляем значение, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    try { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
+                                }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
                             }
@@ -963,19 +965,20 @@ namespace FUPM2EMU
                             case RR:
                             {
                                 // Первый регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Второй регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
                                 // Перевод ввода в число и запись в конец слова.
-                                Command |= (std::stoi(Input) & 0xFFFF); // 16 бит на короткий Imm16.
+                                try { Command |= (std::stoi(Input) & 0x0FFFF); } // 16 бит на короткий Imm.
+                                catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
                                 break;
                             }
 
@@ -983,15 +986,19 @@ namespace FUPM2EMU
                             case RM:
                             {
                                 // Регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSREG)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REGCODE)); }
+                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд - адрес.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
 
                                 // Проверка, число это, или метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    try { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_ADDR); };
+                                }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
                             }
@@ -1000,10 +1007,14 @@ namespace FUPM2EMU
                             case Me:
                             {
                                 // Непосредственный операнд - адрес.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
 
                                 // Проверка, число это, исли метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    try { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_ADDR); };
+                                }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
                             }
@@ -1012,11 +1023,15 @@ namespace FUPM2EMU
                             case Im:
                             {
                                 // Непосредственный операнд - число.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
 
-                                // Проверка, число ли это. Если нет, бросаем исключение.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
-                                else { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
+                                // Проверка, число это, исли метка. Если число, сразу подставляем значение, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos)
+                                {
+                                    try { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
+                                }
+                                else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
                             }
                         }
@@ -1043,7 +1058,7 @@ namespace FUPM2EMU
                 // Читаем слово-команду, вставляем адрес и записываем.
                 uint32_t Word = OperatedState.getWord(UsedMarks[i].first);
                 try { Word |= MarksAddresses.at(UsedMarks[i].second); }
-                catch (std::out_of_range) { throw(AssemblingException(UsedMarks[i].first, AssemblingException::Code::MARK)); }
+                catch (std::out_of_range) { throw(AssemblingException(UsedMarks[i].first, AssemblingException::Code::UNDECLARED_MARK)); }
                 OperatedState.setWord(Word, UsedMarks[i].first);
             }
         }
@@ -1053,39 +1068,49 @@ namespace FUPM2EMU
             switch(Exception.code)
             {
                 case AssemblingException::Code::OK: { break; }
-                case AssemblingException::Code::OPCODE:
+                case AssemblingException::Code::OP_CODE:
                 {
                     std::cerr << "Unknown operation code." << std::endl;
                     break;
                 }
-                case AssemblingException::Code::REGCODE:
+                case AssemblingException::Code::REG_CODE:
                 {
                     std::cerr << "Unknown register name." << std::endl;
                     break;
                 }
-                case AssemblingException::Code::ARGSREG:
+                case AssemblingException::Code::REG_EXPECTED:
                 {
-                    std::cerr << "Register argument was not specified." << std::endl;
+                    std::cerr << "Register argument was expected but was not specified." << std::endl;
                     break;
                 }
-                case AssemblingException::Code::ARGSIMM:
+                case AssemblingException::Code::IMM_EXPECTED:
                 {
-                    std::cerr << "Immediate argument was not specified." << std::endl;
+                    std::cerr << "Immediate argument was expected but was not specified." << std::endl;
                     break;
                 }
-                case AssemblingException::Code::ARGSADDR:
+                case AssemblingException::Code::ADDR_EXPECTED:
                 {
                     std::cerr << "Address was expected but was not specified." << std::endl;
                     break;
                 }
-                case AssemblingException::Code::ARGSMARK:
+                case AssemblingException::Code::MARK_EXPECTED:
                 {
-                    std::cerr << "Mark argument was not specified." << std::endl;
+                    std::cerr << "Mark argument was expected but was not specified." << std::endl;
                     break;
                 }
-                case AssemblingException::Code::MARK:
+                case AssemblingException::Code::UNDECLARED_MARK:
                 {
-                    std::cerr << "Unspecified mark was used." << std::endl;
+                    std::cerr << "Undeclared mark was used." << std::endl;
+                    break;
+                }
+                case AssemblingException::Code::BIG_IMM:
+                {
+                    std::cerr << "Given immediate operand is too big." << std::endl;
+                    break;
+                }
+                case AssemblingException::Code::BIG_ADDR:
+                {
+                    std::cerr << "Given address is too big." << std::endl;
                     break;
                 }
             }
