@@ -953,12 +953,9 @@ namespace FUPM2EMU
                                 // Непосредственный операнд.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSIMM)); }
 
-                                // Проверка, число ли это.
-                                if (Input.find_first_not_of("0123456789") == std::string::npos)
-                                {
-                                    // Перевод ввода в число и запись в конец слова.
-                                    Command |= (std::stoi(Input) & 0xFFFFF); // 20 бит на Imm20.
-                                }
+                                // Проверка, число это, или метка. Если число, сразу подставляем значение, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
+                                if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
+                                else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
                             }
 
@@ -993,7 +990,7 @@ namespace FUPM2EMU
                                 // Непосредственный операнд - адрес.
                                 if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ARGSADDR)); }
 
-                                // Проверка, число это, исли метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
+                                // Проверка, число это, или метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
                                 if (Input.find_first_not_of("0123456789") == std::string::npos) { Command |= (std::stoi(Input) & 0xFFFFF); }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
@@ -1154,7 +1151,6 @@ namespace FUPM2EMU
                         std::cerr << "[EMULATOR ERROR]: machine state has become invalid." << std::endl;
                         break;
                     }
-                    default: { break; }
                 }
                 std::cerr << "FUPM2EMU has encountered a critical error. Shutting down." << std::endl;
                 break;
