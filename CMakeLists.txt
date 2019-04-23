@@ -8,8 +8,8 @@ project(FUPM2EMU)
 include_directories(include)
 
 # Adding source files.
-# set(SOURCES src/main.cpp) # - Manually.
-file(GLOB SOURCES "src/*.cpp") # - Automatically.
+# set(SOURCES source/main.cpp) # - Manually.
+file(GLOB SOURCES "source/*.cpp") # - Automatically.
 
 add_executable(FUPM2EMU ${SOURCES}) # Using variable SOURCES.
 
