@@ -14,6 +14,7 @@ Arguments:
   --help, -h                    Show help reference
   --load, -l         <file>     Get machine's state from the file and run it.
   --assemble, -a     <file>     Translate assembler code from the file and run the result
+  --disassemble, -d             Disassembles current machine's state.
   --benchmark, -b               Run the program with execution time beeing measured
 )";
 
