@@ -77,12 +77,6 @@ namespace FUPM2EMU
         Im = 4, // Непосредственный операнд.
     };
 
-    ////////////////
-
-    // Вспомогательные функции.
-    inline uint32_t ReadWord(uint8_t *Address);              // Конвертация четырёх uint8_t в uint32_t по указаному адресу.
-    inline void WriteWord(uint32_t Value, uint8_t *Address); // Конвертация uint32_t в четыре uint8_t и запись их в нужном порядке по указанному адресу.
-
 
     /////////////////  STATE  ////////////////
     // Состояние машины - значение регистров, флагов, указатель на блок памяти.
@@ -121,7 +115,7 @@ namespace FUPM2EMU
 
         // Данные состояния.
         int32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
-        uint8_t Flags;                      // Регистр флагов (битность не задана спецификацией).
+        uint8_t Flags;                      // Регистр флагов (разрядность не задана спецификацией).
         std::vector<uint8_t> Memory;        // Память эмулируемой машины.
 
         // Методы.
@@ -132,7 +126,7 @@ namespace FUPM2EMU
         int load(std::fstream &FileStream);
 
         // Удобные и сокращающие длину кода обёртки над ReadWord() и WriteWord(), работающие с Memory.
-        inline uint32_t getWord(size_t Address);
+        inline uint32_t getWord(size_t Address) const;
         inline void setWord(uint32_t Value, size_t Address);
 
     protected:
@@ -200,24 +194,32 @@ namespace FUPM2EMU
         // Коды исключений.
         enum class Exception
         {
-            OK,         // OK.
-            ASSEMBLING, // Ошибка при ассемблировании.
+            OK,            // OK.
+            ASSEMBLING,    // Ошибка при ассемблировании.
+            DISASSEMBLING, // Ошибка при дизассемблировании.
         };
 
         // Методы.
         Translator();
         ~Translator();
 
-        int Assemble(std::fstream &FileStream, State &OperatedState);    // Ассемблирование кода из файла.
-        int Disassemble(State &OperatedState, std::fstream &FileSTream); // Дизассемблирование состояния в файл.
+        // Ассемблирование кода из файла.
+        int Assemble(std::istream &InputStream, State &OperatedState) const;
+
+        // Дизассемблирование состояния в файл.
+        int Disassemble(const State &OperatedState, std::ostream &OutputSream) const;
 
     protected:
         // Данные для трансляции.
-        std::map<std::string, int> OpCode;  // Отображение из имени операции в её код.
-        std::map<std::string, int> OpType;  // Отображение из имени операции в её тип.
+        std::map<std::string, OPERATION_CODE> OpCode;  // Отображение из имени операции в её код.
+        std::map<std::string, OPERATION_TYPE> OpType;  // Отображение из имени операции в её тип.
         std::map<std::string, int> RegCode; // Отображение из имени регистра в его код.
 
-        // Целая структура для обработки исключений.
+        std::map<OPERATION_CODE, std::string> CodeOp;      // Отображение из кода операции в её имя.
+        std::map<OPERATION_CODE, OPERATION_TYPE> CodeType; // Отображение из кода операции в её тип.
+        std::map<int, std::string> CodeReg; // Отображение из кода регистра в его имя.
+
+        // Структура для обработки исключений при ассемблировании.
         struct AssemblingException
         {
             // Коды исключений

@@ -4,31 +4,13 @@
 #include<cstdio>
 #include<cstring>
 
-//#define EXECUTION_DEBUG_OUTPUT
-//#define LOADINGSTATE_DEBUG_OUTPUT
-//#define ASSEMBLING_DEBUG_OUTPUT
-//#define EXECUTION_DEBUG_STEPS
+//#define DEBUG_OUTPUT_EXECUTION
+//#define DEBUG_OUTPUT_LOADINGSTATE
+//#define DEBUG_OUTPUT_ASSEMBLING
+//#define DEBUG_EXECUTION_STEPS
 
 namespace FUPM2EMU
 {
-    // Вспомогательные функции.
-    // Конвертация четырёх uint8_t в uint32_t по указаному адресу.
-    inline uint32_t ReadWord(uint8_t *Address)
-    {
-        return((uint32_t(Address[0]) << 24) | (uint32_t(Address[1]) << 16) | (uint32_t(Address[2]) << 8) | uint32_t(Address[3]));
-    }
-
-    // Конвертация uint32_t в четыре uint8_t и запись их в нужном порядке по указанному адресу.
-    inline void WriteWord(uint32_t Value, uint8_t *Address)
-    {
-        Address[3] = uint8_t(Value & 0xFF); Value >>= 8;
-        Address[2] = uint8_t(Value & 0xFF); Value >>= 8;
-        Address[1] = uint8_t(Value & 0xFF); Value >>= 8;
-        Address[0] = uint8_t(Value & 0xFF);
-    }
-
-
-
     /////////////////  STATE  ////////////////
     // Настройки компиляции:
     #define MEMORY_MOD          // Модульная адресация.
@@ -60,8 +42,8 @@ namespace FUPM2EMU
         {
             if(FileStream.read(Bytes, BytesInWord))
             {
-                Registers[i] = ReadWord((uint8_t*)Bytes);
-                #ifdef LOADINGSTATE_DEBUG_OUTPUT
+                Registers[i] = (uint32_t(Bytes[0]) << 24) | (uint32_t(Bytes[1]) << 16) | (uint32_t(Bytes[2]) << 8) | uint32_t(Bytes[3]);
+                #ifdef DEBUG_OUTPUT_LOADINGSTATE
                 std::cout << "R" << i << ": " << Registers[i] << std::endl;
                 #endif
             }
@@ -69,7 +51,7 @@ namespace FUPM2EMU
 
         // Регистр флагов.
         if (FileStream.get(Bytes[0])) { Flags = uint8_t(Bytes[0]); }
-        #ifdef LOADINGSTATE_DEBUG_OUTPUT
+        #ifdef DEBUG_OUTPUT_LOADINGSTATE
         std::cout << "Flags: " << (unsigned int)Flags << std::endl;
         #endif
 
@@ -78,7 +60,7 @@ namespace FUPM2EMU
         while(FileStream.get(Bytes[0]) && (Address < (MemorySize * BytesInWord)))
         {
             Memory[Address] = uint8_t(Bytes[0]);
-            #ifdef LOADINGSTATE_DEBUG_OUTPUT
+            #ifdef DEBUG_OUTPUT_LOADINGSTATE
             std::cout << Address << ": " << (unsigned int)Memory[Address] << std::endl;
             #endif
             ++Address;
@@ -88,7 +70,7 @@ namespace FUPM2EMU
     }
 
 
-    inline uint32_t State::getWord(size_t Address)
+    inline uint32_t State::getWord(size_t Address) const
     {
         // Адресация по модулю.
         #ifdef MEMORY_MOD
@@ -100,7 +82,8 @@ namespace FUPM2EMU
         if (Address > MemorySize) { throw(Exception::MEMORY); }
         #endif
 
-        return(ReadWord(&(Memory[Address * BytesInWord])));
+        size_t ByteAddress = Address * BytesInWord;
+        return((uint32_t(Memory[ByteAddress]) << 24) | (uint32_t(Memory[ByteAddress + 1]) << 16) | (uint32_t(Memory[ByteAddress + 2]) << 8) | uint32_t(Memory[ByteAddress + 3]));
     }
     inline void State::setWord(uint32_t Value, size_t Address)
     {
@@ -114,7 +97,11 @@ namespace FUPM2EMU
         if (Address > MemorySize) { throw(Exception::MEMORY); }
         #endif
 
-        WriteWord(Value, &(Memory[Address * BytesInWord]));
+        size_t ByteAddress = Address * BytesInWord;
+        Memory[ByteAddress + 3] = uint8_t(Value & 0xFF); Value >>= 8;
+        Memory[ByteAddress + 2] = uint8_t(Value & 0xFF); Value >>= 8;
+        Memory[ByteAddress + 1] = uint8_t(Value & 0xFF); Value >>= 8;
+        Memory[ByteAddress] = uint8_t(Value & 0xFF);
     }
 
 
@@ -136,7 +123,7 @@ namespace FUPM2EMU
         // Извлечение следующией команды.
         uint32_t Command = OperatedState.getWord(OperatedState.Registers[15]);
 
-        // Код будет короче, если вычислить все возможные операнды сразуx.
+        // Код будет короче, если вычислить все возможные операнды сразу.
         OPERATION_CODE Operation = OPERATION_CODE((Command >> 24) & 0xFF);
         uint8_t R1 = (Command >> 20) & 0xF;
         uint8_t R2 = (Command >> 16) & 0xF;
@@ -145,7 +132,7 @@ namespace FUPM2EMU
 
         ReturnCode ReturnCode = ReturnCode::OK;
 
-        #ifdef EXECUTION_DEBUG_OUTPUT
+        #ifdef DEBUG_OUTPUT_EXECUTION
         std::cout << "OPCODE: " << Operation << std::endl;
         std::cout << "Registers:"
                   << " R" << (unsigned int)R1 << ": " << OperatedState.Registers[R1]
@@ -756,7 +743,7 @@ namespace FUPM2EMU
     Translator::Translator()
     {
         // Таблица, связывающая имя операции, её код и тип.
-        std::vector<std::tuple<std::string, int, int>> TranslationTable =
+        std::vector<std::tuple<std::string, OPERATION_CODE, OPERATION_TYPE>> TranslationTable =
         {
             // Системное.
             {"halt",    HALT,    RI},
@@ -835,12 +822,17 @@ namespace FUPM2EMU
         // Заполнение отображений.
         for (size_t i = 0; i < TranslationTable.size(); ++i)
         {
+            // Ассемблирование.
             OpCode.insert({ std::get<0>(TranslationTable[i]), std::get<1>(TranslationTable[i]) });
             OpType.insert({ std::get<0>(TranslationTable[i]), std::get<2>(TranslationTable[i]) });
+
+            // Дизассемблирование.
+            CodeOp.insert({ std::get<1>(TranslationTable[i]), std::get<0>(TranslationTable[i]) });
+            CodeType.insert({ std::get<1>(TranslationTable[i]), std::get<2>(TranslationTable[i]) });
         }
 
-        // Инициализация отображения имён регистров в их коды.
-        RegCode =
+        // Таблица, связывающая имя регистра и его код.
+        std::vector<std::tuple<std::string, int>> RegistersTable =
         {
             {"r0",  0 },
             {"r1",  1 },
@@ -859,13 +851,23 @@ namespace FUPM2EMU
             {"r14", 14},
             {"r15", 15}
         };
+
+        // Заполнение отображений.
+        for (size_t i = 0; i < RegistersTable.size(); ++i)
+        {
+            // Ассемблирование.
+            RegCode.insert({ std::get<0>(RegistersTable[i]), std::get<1>(RegistersTable[i]) });
+
+            // Дизассемблирование.
+            CodeReg.insert({ std::get<1>(RegistersTable[i]), std::get<0>(RegistersTable[i]) });
+        }
     }
     Translator::~Translator()
     {
         // ...
     }
 
-    int Translator::Assemble(std::fstream &FileStream, FUPM2EMU::State &OperatedState)
+    int Translator::Assemble(std::istream &InputStream, FUPM2EMU::State &OperatedState) const
     {
         size_t WriteAddress = 0; // Адрес текущего записываемого слова в OperatedState.
         std::string Input;       // Строка для считывания слов из входного файла.
@@ -882,7 +884,7 @@ namespace FUPM2EMU
         try
         {
             // Чтение идёт до конца файла.
-            while(!FileStream.eof())
+            while(!InputStream.eof())
             {
                 switch(CurrentState)
                 {
@@ -890,14 +892,14 @@ namespace FUPM2EMU
                     case ParserState::IN_CODE:
                     {
                         // Считываем строку-слово.
-                        if (!(FileStream >> Input)) { break; } // Проверка на успешность чтения.
+                        if (!(InputStream >> Input)) { break; } // Проверка на успешность чтения.
                         if (!Input.size()) { break; }          // Проверка строки на пустоту.
 
-                        #ifdef ASSEMBLING_DEBUG_OUTPUT
+                        #ifdef DEBUG_OUTPUT_ASSEMBLING
                         std::cout << "Command/mark:" << Input << std::endl;
                         #endif
 
-                        // Начинается на ";" - входим в состояние "в комментарии" (до новой строки).
+                        // Начинается на ";" - входим в состояние "в комментарии" (до новой строки)
                         if (Input[0] == ';')
                         {
                             CurrentState = ParserState::IN_COMMENT;
@@ -923,7 +925,7 @@ namespace FUPM2EMU
                         // к моменту её чтения метка уже точно должна существовать. Тогда можно сразу проинициализировать нужным значением регистр R15.
                         if (Input == "end")
                         {
-                            if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::MARK_EXPECTED)); } // Чтение имени метки.
+                            if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::MARK_EXPECTED)); } // Чтение имени метки.
                             try { OperatedState.Registers[15] = MarksAddresses.at(Input); }
                             catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::UNDECLARED_MARK)); }
                             break;
@@ -944,12 +946,12 @@ namespace FUPM2EMU
                             case RI:
                             {
                                 // Регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
+                                if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
+                                if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
 
                                 // Проверка, число это, или метка. Если число, сразу подставляем значение, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
@@ -965,17 +967,17 @@ namespace FUPM2EMU
                             case RR:
                             {
                                 // Первый регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
+                                if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Второй регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
+                                if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
+                                if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
                                 // Перевод ввода в число и запись в конец слова.
                                 try { Command |= (std::stoi(Input) & 0x0FFFF); } // 16 бит на короткий Imm.
                                 catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
@@ -986,12 +988,12 @@ namespace FUPM2EMU
                             case RM:
                             {
                                 // Регистр.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
+                                if (!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
                                 catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд - адрес.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
+                                if (!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
 
                                 // Проверка, число это, или метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
@@ -1007,7 +1009,7 @@ namespace FUPM2EMU
                             case Me:
                             {
                                 // Непосредственный операнд - адрес.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
+                                if (!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
 
                                 // Проверка, число это, исли метка. Если число, сразу подставляем адрес, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
@@ -1023,7 +1025,7 @@ namespace FUPM2EMU
                             case Im:
                             {
                                 // Непосредственный операнд - число.
-                                if(!(FileStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
+                                if (!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
 
                                 // Проверка, число это, исли метка. Если число, сразу подставляем значение, если метка - запоминаем адрес команды для последующей подстановки адреса метки.
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
@@ -1045,7 +1047,7 @@ namespace FUPM2EMU
                     // В комментарии.
                     case ParserState::IN_COMMENT:
                     {
-                        FileStream.ignore (std::numeric_limits<std::streamsize>::max(), '\n'); // Пропускаем ввод до первого символа новой строки.
+                        InputStream.ignore (std::numeric_limits<std::streamsize>::max(), '\n'); // Пропускаем ввод до первого символа новой строки.
                         CurrentState = ParserState::IN_CODE;
                         break;
                     }
@@ -1122,6 +1124,93 @@ namespace FUPM2EMU
         return(0);
     }
 
+    int Translator::Disassemble(const State &OperatedState, std::ostream &OutputStream) const
+    {
+        size_t Address = 0; // Текущий адрес.
+        uint32_t Word = 0;  // Считанное слово.
+
+        // Проход по всей памяти.
+        while (Address < State::MemorySize)
+        {
+            // Цикл вывода непустой части памяти.
+            while (Address < State::MemorySize)
+            {
+                // Чтение слова по текущему адресу.
+                Word = OperatedState.getWord(Address);
+
+                // Код будет короче, если вычислить все возможные операнды сразу.
+                OPERATION_CODE Operation = OPERATION_CODE((Word >> 24) & 0xFF);
+                uint8_t R1 = (Word >> 20) & 0xF;
+                uint8_t R2 = (Word >> 16) & 0xF;
+                int32_t Imm16 = Word & 0x0FFFF;
+                int32_t Imm20 = Word & 0xFFFFF;
+
+                // Два варианта: либо считана команда, либо нет.
+                auto Iterator = CodeOp.find(Operation);
+                if (Iterator != CodeOp.end())
+                {
+                    // Вывод имени команды.
+                    OutputStream << Iterator->second;
+
+                    // Вывод аргументов.
+                    switch (CodeType.at(Operation))
+                    {
+                        case RI:
+                        {
+                            OutputStream << " " << CodeReg.at(R1) << " " << Imm20;
+                            break;
+                        }
+                        case RR:
+                        {
+                            OutputStream << " " << CodeReg.at(R1) << " " << CodeReg.at(R2) << " " << Imm16;
+                            break;
+                        }
+                        case RM:
+                        {
+                            OutputStream << " " << CodeReg.at(R1) << " " << Imm20;
+                            break;
+                        }
+                        case Me:
+                        {
+                            OutputStream << " " << Imm20;
+                            break;
+                        }
+                        case Im:
+                        {
+                            OutputStream << " " << Imm20;
+                            break;
+                        }
+                    }
+
+                    // Конец вывода.
+                    OutputStream << std::endl;
+                }
+                else
+                {
+                    // Вывод слова.
+                    OutputStream << Word << std::endl;
+                }
+
+                ++Address;
+                // Выход из цикла после первого пустого слова.
+                if (!Word) { break; }
+            }
+
+            // Цикл пропуска пустой части памяти.
+            while (Address < State::MemorySize)
+            {
+                // Чтение слова по текущему адресу.
+                Word = OperatedState.getWord(Address);
+
+                // Если слово вдруг оказалось непустым, выходим из цикла.
+                if (Word) { break; }
+                ++Address;
+            }
+        }
+
+        return(0);
+    }
+
     // PROTECTED:
 
     //////// ASSEMBLING EXCEPTION ////////
@@ -1151,19 +1240,19 @@ namespace FUPM2EMU
         Executor::ReturnCode ReturnCode = Executor::ReturnCode::OK; // Код возврата операции.
 
         // Пока все хорошо.
-        while(ReturnCode == Executor::ReturnCode::OK)
+        while (ReturnCode == Executor::ReturnCode::OK)
         {
             try
             {
                 ReturnCode = executor.step(state);
 
-                #ifdef EXECUTION_DEBUG_STEPS
+                #ifdef DEBUG_EXECUTION_STEPS
                 getchar();
                 #endif
             }
             catch (Executor::Exception Exception)
             {
-                switch(Exception)
+                switch (Exception)
                 {
                     case Executor::Exception::OK: { break; }
                     case Executor::Exception::MACHINE:
@@ -1181,7 +1270,7 @@ namespace FUPM2EMU
                 break;
             }
 
-            #ifdef EXECUTION_DEBUG_OUTPUT
+            #ifdef DEBUG_OUTPUT_EXECUTION
             std::cout << "ReturnCode: " << int(ReturnCode) << std::endl;
             #endif
         }

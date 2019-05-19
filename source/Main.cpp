@@ -6,7 +6,7 @@
 #include<chrono>
 
 // Глобальные константы для вывода информации.
-const std::string Version   = "0.9";
+const std::string Version   = "0.92";
 const std::string TitleText = "FUPM2EMU version " + Version;
 const std::string HelpText  =
 R"(
@@ -19,7 +19,7 @@ Arguments:
 
 int main(int argc,  char *argv[])
 {
-    // Возможные состояния инициализации.
+    // Исключения загрузчика.
     enum class ArgsException
     {
         OK,          // Все нормально.
@@ -28,7 +28,8 @@ int main(int argc,  char *argv[])
         NOFILEPATH,  // Не указан путь.
     };
 
-    enum class FileMode
+    // Режимы обработки файла инициализации.
+    enum class InitFileModes
     {
         DEFAULT,  // Без загрузки файлов.
         STATE,    // Загрузка состояния памяти.
@@ -38,9 +39,13 @@ int main(int argc,  char *argv[])
     // Измерение времени работы.
     bool Benchmark = false;
 
-    // Робота с файлом.
-    std::string FilePath;
-    FileMode initFileMode = FileMode::DEFAULT;
+    // Инициализация из файла.
+    std::string InitFilePath;
+    InitFileModes InitFileMode = InitFileModes::DEFAULT;
+
+    // Дизассемблирование в файл.
+    //std::string DisassemblyFilePath;
+    bool Disassemble = false;
 
     try
     {
@@ -60,23 +65,29 @@ int main(int argc,  char *argv[])
             // Загрузка состояния эмулятора из файла.
             else if ((Argument == "--load") || (Argument == "-l"))
             {
-                if (initFileMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
+                if (InitFileMode != InitFileModes::DEFAULT) { throw(ArgsException::INCOMPARGS); }
                 if (i + 1 >= argc) { throw(ArgsException::NOFILEPATH); }
 
-                initFileMode = FileMode::STATE;
-                FilePath = argv[i+1];
+                InitFileMode = InitFileModes::STATE;
+                InitFilePath = argv[i+1];
                 ++i;
             }
 
             // Ассемблирование исходного кода из файла в состояние эмулятора.
             else if ((Argument == "--assemble") || (Argument == "-a"))
             {
-                if (initFileMode != FileMode::DEFAULT) { throw(ArgsException::INCOMPARGS); }
+                if (InitFileMode != InitFileModes::DEFAULT) { throw(ArgsException::INCOMPARGS); }
                 if (i + 1 >= argc) { throw(ArgsException::NOFILEPATH); }
 
-                initFileMode = FileMode::ASSEMBLE;
-                FilePath = argv[i+1];
+                InitFileMode = InitFileModes::ASSEMBLE;
+                InitFilePath = argv[i+1];
                 ++i;
+            }
+
+            // Дизассемблирование состояния эмулятора.
+            else if ((Argument == "--disassemble") || (Argument == "-d"))
+            {
+                Disassemble = true;
             }
 
             // Измерение времени компиляции (если была) и работы эмулируемой программы.
@@ -119,19 +130,19 @@ int main(int argc,  char *argv[])
     // Экземпляр эмулятора.
     FUPM2EMU::Emulator FUPM2;
 
-    if (!FilePath.empty())
+    if (!InitFilePath.empty())
     {
-        switch(initFileMode)
+        switch(InitFileMode)
         {
-            case FileMode::DEFAULT:
+            case InitFileModes::DEFAULT:
             {
                 break;
             }
-            case FileMode::STATE:
+            case InitFileModes::STATE:
             {
                 // Загрузка файла состояния, передача потока файла эмулятору.
                 std::fstream FileStream;
-                FileStream.open(FilePath, std::fstream::in);
+                FileStream.open(InitFilePath, std::fstream::in);
                 if (FileStream.is_open())
                 {
                     FUPM2.state.load(FileStream);
@@ -139,15 +150,15 @@ int main(int argc,  char *argv[])
                 }
                 else
                 {
-                    std::cerr << "Error: failed to open file: " << FilePath << std::endl;
+                    std::cerr << "Error: failed to open file: " << InitFilePath << std::endl;
                 }
                 break;
             }
-            case FileMode::ASSEMBLE:
+            case InitFileModes::ASSEMBLE:
             {
                 // Загрузка файла с исходным кодом, передача потока файла эмулятору.
                 std::fstream FileStream;
-                FileStream.open(FilePath, std::fstream::in);
+                FileStream.open(InitFilePath, std::fstream::in);
                 if (FileStream.is_open())
                 {
                     if (Benchmark)
@@ -168,10 +179,25 @@ int main(int argc,  char *argv[])
                 }
                 else
                 {
-                    std::cerr << "Error: failed to open file: " << FilePath << std::endl;
+                    std::cerr << "Error: failed to open file: " << InitFilePath << std::endl;
                 }
                 break;
             }
+        }
+    }
+
+    // Дизассемблирование.
+    if (Disassemble)
+    {
+        std::fstream FileStream;
+        FileStream.open("a.asm", std::fstream::out);
+        if (FileStream.is_open())
+        {
+            FUPM2.translator.Disassemble(FUPM2.state, FileStream);
+        }
+        else
+        {
+            std::cerr << "Error: failed to write disassembly file" << std::endl;
         }
     }
 
