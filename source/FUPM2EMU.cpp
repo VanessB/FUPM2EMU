@@ -927,7 +927,7 @@ namespace FUPM2EMU
                         {
                             if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::MARK_EXPECTED)); } // Чтение имени метки.
                             try { OperatedState.Registers[15] = MarksAddresses.at(Input); }
-                            catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::UNDECLARED_MARK)); }
+                            catch (const std::out_of_range&) { throw(AssemblingException(WriteAddress, AssemblingException::Code::UNDECLARED_MARK)); }
                             break;
                         }
 
@@ -937,7 +937,7 @@ namespace FUPM2EMU
 
                         // Парсим операцию.
                         try {Command |= OpCode.at(Input) << (BitsInCommand - BitsInOpCode); }
-                        catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::OP_CODE)); }
+                        catch (const std::out_of_range&) { throw(AssemblingException(WriteAddress, AssemblingException::Code::OP_CODE)); }
 
                         // Парсим аргументы.
                         switch(OpType.at(Input))
@@ -948,7 +948,7 @@ namespace FUPM2EMU
                                 // Регистр.
                                 if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
+                                catch (const std::out_of_range&) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд.
                                 if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
@@ -957,7 +957,7 @@ namespace FUPM2EMU
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
                                 {
                                     try { Command |= (std::stoi(Input) & 0xFFFFF); }
-                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
+                                    catch (const std::out_of_range&) { throw(AssemblingException::Code::BIG_IMM); };
                                 }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
@@ -969,18 +969,18 @@ namespace FUPM2EMU
                                 // Первый регистр.
                                 if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
+                                catch (const std::out_of_range&) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Второй регистр.
                                 if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
+                                catch (const std::out_of_range&) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд.
                                 if(!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::IMM_EXPECTED)); }
                                 // Перевод ввода в число и запись в конец слова.
                                 try { Command |= (std::stoi(Input) & 0x0FFFF); } // 16 бит на короткий Imm.
-                                catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
+                                catch (const std::out_of_range&) { throw(AssemblingException::Code::BIG_IMM); };
                                 break;
                             }
 
@@ -990,7 +990,7 @@ namespace FUPM2EMU
                                 // Регистр.
                                 if (!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_EXPECTED)); }
                                 try { Command |= RegCode.at(Input) << (BitsInCommand - BitsInOpCode - BitsInRegCode); }
-                                catch (std::out_of_range) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
+                                catch (const std::out_of_range&) { throw(AssemblingException(WriteAddress, AssemblingException::Code::REG_CODE)); }
 
                                 // Непосредственный операнд - адрес.
                                 if (!(InputStream >> Input)) { throw(AssemblingException(WriteAddress, AssemblingException::Code::ADDR_EXPECTED)); }
@@ -999,7 +999,7 @@ namespace FUPM2EMU
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
                                 {
                                     try { Command |= (std::stoi(Input) & 0xFFFFF); }
-                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_ADDR); };
+                                    catch (const std::out_of_range&) { throw(AssemblingException::Code::BIG_ADDR); };
                                 }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
@@ -1015,7 +1015,7 @@ namespace FUPM2EMU
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
                                 {
                                     try { Command |= (std::stoi(Input) & 0xFFFFF); }
-                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_ADDR); };
+                                    catch (const std::out_of_range&) { throw(AssemblingException::Code::BIG_ADDR); };
                                 }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
@@ -1031,7 +1031,7 @@ namespace FUPM2EMU
                                 if (Input.find_first_not_of("0123456789") == std::string::npos)
                                 {
                                     try { Command |= (std::stoi(Input) & 0xFFFFF); }
-                                    catch (std::out_of_range) { throw(AssemblingException::Code::BIG_IMM); };
+                                    catch (const std::out_of_range&) { throw(AssemblingException::Code::BIG_IMM); };
                                 }
                                 else { UsedMarks.push_back(std::pair<size_t, std::string>(WriteAddress, Input)); }
                                 break;
@@ -1060,7 +1060,7 @@ namespace FUPM2EMU
                 // Читаем слово-команду, вставляем адрес и записываем.
                 uint32_t Word = OperatedState.getWord(UsedMarks[i].first);
                 try { Word |= MarksAddresses.at(UsedMarks[i].second); }
-                catch (std::out_of_range) { throw(AssemblingException(UsedMarks[i].first, AssemblingException::Code::UNDECLARED_MARK)); }
+                catch (const std::out_of_range&) { throw(AssemblingException(UsedMarks[i].first, AssemblingException::Code::UNDECLARED_MARK)); }
                 OperatedState.setWord(Word, UsedMarks[i].first);
             }
         }
