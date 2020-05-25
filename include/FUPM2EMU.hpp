@@ -1,8 +1,10 @@
-#pragma once
-#include<cstdint>    // Целочисленные типы фиксированной длины.
-#include<vector>     // vector.
-#include<map>        // map.
-#include<fstream>    // file stream.
+#ifndef FUPM2EMU_HPP
+#define FUPM2EMU_HPP
+
+#include <cstdint>    // Целочисленные типы фиксированной длины.
+#include <vector>     // vector.
+#include <map>        // map.
+#include <iostream>   // file stream.
 
 
 // НЕБОЛЬШОЙ КОММЕНТАРИЙ КАСАТЕЛЬНО РАБОТЫ С ПАМЯТЬЮ.
@@ -78,17 +80,19 @@ namespace FUPM2EMU
     };
 
 
-    /////////////////  STATE  ////////////////
-    // Состояние машины - значение регистров, флагов, указатель на блок памяти.
+    ////////////////      State      ///////////////
+    // Состояние машины: значение регистров, флагов, указатель на блок памяти.
     class State
     {
     public:
         // Константы.
-        static const uint8_t BytesInWord = 4;                // Число байт в машинном слове.
-        static const uint8_t BitsInWord  = BytesInWord * 8;  // Число бит в машинном слове.
-        static const uint8_t AddressBits = 20;               // Число бит в адресах.
-        static const size_t  MemorySize  = 1 << AddressBits; // Размер адресуемой памяти (в словах).
-        static const uint8_t RegistersNumber = 16;           // Количество регистров.
+        static const uint8_t bytes_in_word = 4;                 // Число байт в машинном слове.
+        static const uint8_t bits_in_word  = bytes_in_word * 8; // Число бит в машинном слове.
+        static const uint8_t address_bits  = 20;                // Число бит в адресах.
+        static const size_t  memory_size   = 1 << address_bits; // Размер адресуемой памяти (в словах).
+        static const uint8_t registers_number = 16;             // Количество регистров.
+        static const uint8_t CIR = 15; // Current instruction register - номер текущей инструкции.
+        static const uint8_t SR  = 14; // Stack register - адрес стека.
 
         // Коды исключений.
         enum class Exception
@@ -114,20 +118,20 @@ namespace FUPM2EMU
         };
 
         // Данные состояния.
-        int32_t Registers[RegistersNumber]; // Массив регистров (32 бита).
-        uint8_t Flags;                      // Регистр флагов (разрядность не задана спецификацией).
-        std::vector<uint8_t> Memory;        // Память эмулируемой машины.
+        int32_t registers[registers_number]; // Массив регистров (32 бита).
+        uint8_t flags;                       // Регистр флагов (разрядность не задана спецификацией).
+        std::vector<uint8_t> memory;         // Память эмулируемой машины.
 
         // Методы.
         State();
         ~State();
 
-        // Загрузка состояния из потока файла.
-        int load(std::fstream &FileStream);
+        // Загрузка состояния из потока.
+        int load(std::istream& input_stream);
 
-        // Удобные и сокращающие длину кода обёртки над ReadWord() и WriteWord(), работающие с Memory.
-        inline uint32_t getWord(size_t Address) const;
-        inline void setWord(uint32_t Value, size_t Address);
+        // Удобные и сокращающие длину кода обёртки над read_word() и write_word(), работающие с memory.
+        inline uint32_t get_word(size_t address) const;
+        inline void set_word(uint32_t value, size_t address);
 
     protected:
 
@@ -136,7 +140,7 @@ namespace FUPM2EMU
     };
 
 
-    //////////////// EXECUTOR ////////////////
+    ////////////////    Executor    ////////////////
     // Исполнитель машинных команд.
     class Executor
     {
@@ -163,7 +167,7 @@ namespace FUPM2EMU
         ~Executor();
 
         // Выполнение команды.
-        inline ReturnCode step(State &OperatedState);
+        inline ReturnCode step(State& state, std::istream& input_stream, std::ostream& output_stream);
 
     protected:
         // Коды испключений при выполнении операции.
@@ -187,9 +191,9 @@ namespace FUPM2EMU
     {
     public:
         // Константы.
-        static const uint8_t BitsInCommand = State::BitsInWord; // Число битов на команду (в нашем случае команда - одно слово).
-        static const uint8_t BitsInOpCode  = 8; // Число бит на код операции.
-        static const uint8_t BitsInRegCode = 4; // Число бит на код регистра.
+        static const uint8_t bits_in_command = State::bits_in_word; // Число битов на команду (в нашем случае команда - одно слово).
+        static const uint8_t bits_in_op_code  = 8; // Число бит на код операции.
+        static const uint8_t bits_in_reg_code = 4; // Число бит на код регистра.
 
         // Коды исключений.
         enum class Exception
@@ -204,20 +208,20 @@ namespace FUPM2EMU
         ~Translator();
 
         // Ассемблирование кода из файла.
-        int Assemble(std::istream &InputStream, State &OperatedState) const;
+        int assemble(std::istream& input_stream, State& state) const;
 
         // Дизассемблирование состояния в файл.
-        int Disassemble(const State &OperatedState, std::ostream &OutputSream) const;
+        int disassemble(const State& state, std::ostream& output_sream) const;
 
     protected:
         // Данные для трансляции.
-        std::map<std::string, OPERATION_CODE> OpCode;  // Отображение из имени операции в её код.
-        std::map<std::string, OPERATION_TYPE> OpType;  // Отображение из имени операции в её тип.
-        std::map<std::string, int> RegCode; // Отображение из имени регистра в его код.
+        std::map<std::string, OPERATION_CODE> op_code; // Отображение из имени операции в её код.
+        std::map<std::string, OPERATION_TYPE> op_type; // Отображение из имени операции в её тип.
+        std::map<std::string, int> reg_code; // Отображение из имени регистра в его код.
 
-        std::map<OPERATION_CODE, std::string> CodeOp;      // Отображение из кода операции в её имя.
-        std::map<OPERATION_CODE, OPERATION_TYPE> CodeType; // Отображение из кода операции в её тип.
-        std::map<int, std::string> CodeReg; // Отображение из кода регистра в его имя.
+        std::map<OPERATION_CODE, std::string> code_op;      // Отображение из кода операции в её имя.
+        std::map<OPERATION_CODE, OPERATION_TYPE> code_type; // Отображение из кода операции в её тип.
+        std::map<int, std::string> code_reg; // Отображение из кода регистра в его имя.
 
         // Структура для обработки исключений при ассемблировании.
         struct AssemblingException
@@ -241,7 +245,7 @@ namespace FUPM2EMU
             Code code;      // Код исключения.
 
             // Все переменные в обязательном порядке инициализируются кконструктором.
-            AssemblingException(size_t initAddress, Code initCode);
+            AssemblingException(size_t init_address, Code init_code);
         };
 
     private:
@@ -249,7 +253,7 @@ namespace FUPM2EMU
     };
 
 
-    //////////////// EMULATOR ////////////////
+    ////////////////    Emulator    ////////////////
     // Эмулятор - интерфейс для работы с исполнителем машинных команд, состоянием машины и транслятором ассемблера.
     class Emulator
     {
@@ -257,13 +261,13 @@ namespace FUPM2EMU
         // Данные.
         State state;           // Текущее состояние машины.
         Executor executor;     // Исполнитель команд.
-        Translator translator; // Ассемблер и дисассемблер.
+        Translator translator; // Ассемблер и дизассемблер.
 
         // Методы.
         Emulator();
         ~Emulator();
 
-        int Run(); // Выполнить текущее состояние.
+        int run(std::istream& input_stream, std::ostream& output_stream); // Выполнить текущее состояние.
 
     protected:
 
@@ -271,3 +275,5 @@ namespace FUPM2EMU
 
     };
 }
+
+#endif
